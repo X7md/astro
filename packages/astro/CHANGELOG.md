@@ -1,5 +1,11 @@
 # astro
 
+## 0.22.14
+
+### Patch Changes
+
+- [#2393](https://github.com/withastro/astro/pull/2393) [`bcc617f9`](https://github.com/withastro/astro/commit/bcc617f9dc560bd61535c136297e97fb11013d6f) Thanks [@matthewp](https://github.com/matthewp)! - Prepends site subpath when using --experimental-static-build
+
 ## 0.22.13
 
 ### Patch Changes
