@@ -54,9 +54,10 @@ DEBUG=vite:[name] astro dev   # debug specific process, e.g. "vite:deps" or "vit
 ```shell
 # run this in the top-level project root to run all tests
 yarn test
-# run only a few tests, great for working on a single feature
-# (example - `yarn test -g "RSS"` runs `astro-rss.test.js`)
-yarn test -g "$STRING_MATCH"
+# run only a few tests, based on describe() or it() string match
+# great for development, and working on a single feature!
+# (example - `yarn test:match "RSS"` runs tests in `astro-rss.test.js`)
+yarn test:match "$STRING_MATCH"
 ```
 
 ### Other useful commands
@@ -126,7 +127,7 @@ Understanding in which environment code runs, and at which stage in the process,
 
 ## Releasing Astro
 
-_Note: Only core contributors (L3+) can release new versions of Astro._
+_Note: Only [core maintainers (L3+)](https://github.com/withastro/astro/blob/main/GOVERNANCE.md#level-3-l3---core-maintainer) can release new versions of Astro._
 
 The repo is set up with automatic releases, using the changeset GitHub action & bot.
 

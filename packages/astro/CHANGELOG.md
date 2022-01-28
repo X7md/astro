@@ -1,5 +1,21 @@
 # astro
 
+## 0.22.19
+
+### Patch Changes
+
+- [#2440](https://github.com/withastro/astro/pull/2440) [`462e3159`](https://github.com/withastro/astro/commit/462e315956601f3404bbb5d821ede6545ed76d03) Thanks [@matthewp](https://github.com/matthewp)! - Fixes HMR of CSS that is imported from astro, when using the static build flag
+
+## 0.22.18
+
+### Patch Changes
+
+- [#2423](https://github.com/withastro/astro/pull/2423) [`ebe414f0`](https://github.com/withastro/astro/commit/ebe414f05b69d50de4aab64358cd4a31c254f7e6) Thanks [@delucis](https://github.com/delucis)! - Resolve sitemap URLs in relation to full site path
+
+* [#2443](https://github.com/withastro/astro/pull/2443) [`ed0b46f9`](https://github.com/withastro/astro/commit/ed0b46f96faf144fe0946bce1528f4d605a4a42c) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Fix bug with RSS feed generation. `rss()` can now be called multiple times and URLs can now be fully qualified.
+
+- [#2442](https://github.com/withastro/astro/pull/2442) [`dfe1f8b4`](https://github.com/withastro/astro/commit/dfe1f8b4e7d25b7887e34b6514bd2f50a86c7a7d) Thanks [@matthewp](https://github.com/matthewp)! - Allow setting ssr Vite config in the static build
+
 ## 0.22.17
 
 ### Patch Changes
