@@ -4,9 +4,11 @@ import type { AstroGlobalPartial, SSRResult, SSRElement } from '../../@types/ast
 import shorthash from 'shorthash';
 import { extractDirectives, generateHydrateScript } from './hydration.js';
 import { serializeListValue } from './util.js';
-export { createMetadata } from './metadata.js';
-export { escapeHTML } from './escape.js';
+import { escapeHTML, UnescapedString, unescapeHTML } from './escape.js';
+
 export type { Metadata } from './metadata';
+export { createMetadata } from './metadata.js';
+export { escapeHTML, unescapeHTML } from './escape.js';
 
 const voidElementNames = /^(area|base|br|col|command|embed|hr|img|input|keygen|link|meta|param|source|track|wbr)$/i;
 
@@ -19,22 +21,24 @@ const voidElementNames = /^(area|base|br|col|command|embed|hr|img|input|keygen|l
 // Or maybe type UserValue = any; ?
 async function _render(child: any): Promise<any> {
 	child = await child;
-	if (Array.isArray(child)) {
-		return (await Promise.all(child.map((value) => _render(value)))).join('');
+	if (child instanceof UnescapedString) {
+		return child;
+	} else if (Array.isArray(child)) {
+		return unescapeHTML((await Promise.all(child.map((value) => _render(value)))).join(''));
 	} else if (typeof child === 'function') {
 		// Special: If a child is a function, call it automatically.
 		// This lets you do {() => ...} without the extra boilerplate
 		// of wrapping it in a function and calling it.
 		return _render(child());
 	} else if (typeof child === 'string') {
-		return child;
+		return escapeHTML(child, { deprecated: true });
 	} else if (!child && child !== 0) {
 		// do nothing, safe to ignore falsey values.
 	}
 	// Add a comment explaining why each of these are needed.
 	// Maybe create clearly named function for what this is doing.
 	else if (child instanceof AstroComponent || Object.prototype.toString.call(child) === '[object AstroComponent]') {
-		return await renderAstroComponent(child);
+		return unescapeHTML(await renderAstroComponent(child));
 	} else {
 		return child;
 	}
@@ -62,7 +66,7 @@ export class AstroComponent {
 			const html = htmlParts[i];
 			const expression = expressions[i];
 
-			yield _render(html);
+			yield _render(unescapeHTML(html));
 			yield _render(expression);
 		}
 	}
@@ -88,7 +92,7 @@ export function createComponent(cb: AstroComponentFactory) {
 
 export async function renderSlot(_result: any, slotted: string, fallback?: any) {
 	if (slotted) {
-		return _render(slotted);
+		return await _render(slotted);
 	}
 	return fallback;
 }
@@ -122,12 +126,12 @@ export async function renderComponent(result: SSRResult, displayName: string, Co
 	const children = await renderSlot(result, slots?.default);
 
 	if (Component === Fragment) {
-		return children;
+		return unescapeHTML(children);
 	}
 
 	if (Component && (Component as any).isAstroComponentFactory) {
 		const output = await renderToString(result, Component as any, _props, slots);
-		return output;
+		return unescapeHTML(output);
 	}
 
 	if (Component === null && !_props['client:only']) {
@@ -148,7 +152,7 @@ export async function renderComponent(result: SSRResult, displayName: string, Co
 	}
 	const probableRendererNames = guessRenderers(metadata.componentUrl);
 
-	if (Array.isArray(renderers) && renderers.length === 0 && typeof Component !== 'string') {
+	if (Array.isArray(renderers) && renderers.length === 0 && typeof Component !== 'string' && !HTMLElement.isPrototypeOf(Component as object)) {
 		const message = `Unable to render ${metadata.displayName}!
 
 There are no \`renderers\` set in your \`astro.config.mjs\` file.
@@ -164,6 +168,12 @@ Did you mean to enable ${formatList(probableRendererNames.map((r) => '`' + r + '
 				renderer = r;
 				break;
 			}
+		}
+
+		if (!renderer && HTMLElement.isPrototypeOf(Component as object)) {
+			const output = renderHTMLElement(result, Component as typeof HTMLElement, _props, slots);
+
+			return output;
 		}
 	} else {
 		// Attempt: use explicitly passed renderer name
@@ -227,7 +237,9 @@ If you're still stuck, please open an issue on GitHub or join us at https://astr
 	// as a string and the user is responsible for adding a script tag for the component definition.
 	if (!html && typeof Component === 'string') {
 		html = await renderAstroComponent(
-			await render`<${Component}${spreadAttributes(props)}${(children == null || children == '') && voidElementNames.test(Component) ? `/>` : `>${children}</${Component}>`}`
+			await render`<${Component}${spreadAttributes(props)}${unescapeHTML(
+				(children == null || children == '') && voidElementNames.test(Component) ? `/>` : `>${children}</${Component}>`
+			)}`
 		);
 	}
 
@@ -242,7 +254,7 @@ If you're still stuck, please open an issue on GitHub or join us at https://astr
 	}
 
 	if (!hydration) {
-		return html.replace(/\<\/?astro-fragment\>/g, '');
+		return unescapeHTML(html.replace(/\<\/?astro-fragment\>/g, ''));
 	}
 
 	// Include componentExport name and componentUrl in hash to dedupe identical islands
@@ -252,11 +264,12 @@ If you're still stuck, please open an issue on GitHub or join us at https://astr
 	// INVESTIGATE: This will likely be a problem in streaming because the `<head>` will be gone at this point.
 	result.scripts.add(await generateHydrateScript({ renderer, result, astroId, props }, metadata as Required<AstroComponentMetadata>));
 
-	return `<astro-root uid="${astroId}">${html ?? ''}</astro-root>`;
+	return unescapeHTML(`<astro-root uid="${astroId}">${html ?? ''}</astro-root>`);
 }
 
 /** Create the Astro.fetchContent() runtime function. */
-function createFetchContentFn(url: URL) {
+function createFetchContentFn(url: URL, site: URL) {
+	let sitePathname = site.pathname;
 	const fetchContent = (importMetaGlobResult: Record<string, any>) => {
 		let allEntries = [...Object.entries(importMetaGlobResult)];
 		if (allEntries.length === 0) {
@@ -274,7 +287,7 @@ function createFetchContentFn(url: URL) {
 					Content: mod.default,
 					content: mod.metadata,
 					file: new URL(spec, url),
-					url: urlSpec.includes('/pages/') ? urlSpec.replace(/^.*\/pages\//, '/').replace(/(\/index)?\.md$/, '') : undefined,
+					url: urlSpec.includes('/pages/') ? urlSpec.replace(/^.*\/pages\//, sitePathname).replace(/(\/index)?\.md$/, '') : undefined,
 				};
 			})
 			.filter(Boolean);
@@ -287,12 +300,13 @@ function createFetchContentFn(url: URL) {
 
 // This is used to create the top-level Astro global; the one that you can use
 // Inside of getStaticPaths.
-export function createAstro(filePathname: string, site: string, projectRootStr: string): AstroGlobalPartial {
+export function createAstro(filePathname: string, _site: string, projectRootStr: string): AstroGlobalPartial {
+	const site = new URL(_site);
 	const url = new URL(filePathname, site);
 	const projectRoot = new URL(projectRootStr);
-	const fetchContent = createFetchContentFn(url);
+	const fetchContent = createFetchContentFn(url, site);
 	return {
-		site: new URL(site),
+		site,
 		fetchContent,
 		// INVESTIGATE is there a use-case for multi args?
 		resolve(...segments: string[]) {
@@ -328,14 +342,14 @@ Make sure to use the static attribute syntax (\`${key}={value}\`) instead of the
 
 	// support "class" from an expression passed into an element (#782)
 	if (key === 'class:list') {
-		return ` ${key.slice(0, -5)}="${toAttributeString(serializeListValue(value))}"`;
+		return unescapeHTML(` ${key.slice(0, -5)}="${toAttributeString(serializeListValue(value))}"`);
 	}
 
 	// Boolean only needs the key
 	if (value === true && key.startsWith('data-')) {
-		return ` ${key}`;
+		return unescapeHTML(` ${key}`);
 	} else {
-		return ` ${key}="${toAttributeString(value)}"`;
+		return unescapeHTML(` ${key}="${toAttributeString(value)}"`);
 	}
 }
 
@@ -345,7 +359,7 @@ export function spreadAttributes(values: Record<any, any>) {
 	for (const [key, value] of Object.entries(values)) {
 		output += addAttribute(value, key);
 	}
-	return output;
+	return unescapeHTML(output);
 }
 
 // Adds CSS variables to an inline style tag
@@ -370,7 +384,7 @@ export function defineScriptVars(vars: Record<any, any>) {
 export async function renderToString(result: SSRResult, componentFactory: AstroComponentFactory, props: any, children: any) {
 	const Component = await componentFactory(result, props, children);
 	let template = await renderAstroComponent(Component);
-	return template;
+	return unescapeHTML(template);
 }
 
 // Filter out duplicate elements in our set
@@ -384,16 +398,16 @@ const uniqueElements = (item: any, index: number, all: any[]) => {
 // styles and scripts into the head.
 export async function renderPage(result: SSRResult, Component: AstroComponentFactory, props: any, children: any) {
 	const template = await renderToString(result, Component, props, children);
-	const styles = result._metadata.experimentalStaticBuild
-		? []
-		: Array.from(result.styles)
-				.filter(uniqueElements)
-				.map((style) =>
-					renderElement('style', {
-						...style,
-						props: { ...style.props, 'astro-style': true },
-					})
-				);
+	const styles = Array.from(result.styles)
+		.filter(uniqueElements)
+		.map((style) => {
+			const styleChildren = result._metadata.experimentalStaticBuild ? '' : style.children;
+
+			return renderElement('style', {
+				children: styleChildren,
+				props: { ...style.props, 'astro-style': true },
+			});
+		});
 	let needsHydrationStyles = false;
 	const scripts = Array.from(result.scripts)
 		.filter(uniqueElements)
@@ -423,15 +437,39 @@ export async function renderPage(result: SSRResult, Component: AstroComponentFac
 }
 
 export async function renderAstroComponent(component: InstanceType<typeof AstroComponent>) {
-	let template = '';
+	let template = [];
 
 	for await (const value of component) {
 		if (value || value === 0) {
-			template += value;
+			template.push(value);
 		}
 	}
 
-	return template;
+	return unescapeHTML(await _render(template));
+}
+
+export async function renderHTMLElement(result: SSRResult, constructor: typeof HTMLElement, props: any, slots: any) {
+	const name = getHTMLElementName(constructor);
+
+	let attrHTML = '';
+
+	for (const attr in props) {
+		attrHTML += ` ${attr}="${toAttributeString(await props[attr])}"`;
+	}
+
+	return `<${name}${attrHTML}>${await renderSlot(result, slots?.default)}</${name}>`;
+}
+
+function getHTMLElementName(constructor: typeof HTMLElement) {
+	const definedName = (customElements as CustomElementRegistry & { getName(_constructor: typeof HTMLElement): string }).getName(constructor);
+	if (definedName) return definedName;
+
+	const assignedName = constructor.name
+		.replace(/^HTML|Element$/g, '')
+		.replace(/[A-Z]/g, '-$&')
+		.toLowerCase()
+		.replace(/^-/, 'html-');
+	return assignedName;
 }
 
 function renderElement(name: string, { props: _props, children = '' }: SSRElement) {
