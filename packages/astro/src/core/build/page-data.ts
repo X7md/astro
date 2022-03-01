@@ -1,14 +1,14 @@
-import type { AstroConfig, ComponentInstance, ManifestData, RouteData, RSSResult } from '../../@types/astro';
+import type { AstroConfig, ComponentInstance, ManifestData, RouteData } from '../../@types/astro';
 import type { AllPagesData } from './types';
 import type { LogOptions } from '../logger';
-import type { ViteDevServer } from '../vite.js';
+import type { ViteDevServer } from 'vite';
 
 import { fileURLToPath } from 'url';
 import * as colors from 'kleur/colors';
 import { debug } from '../logger.js';
-import { preload as ssrPreload } from '../ssr/index.js';
-import { generateRssFunction } from '../ssr/rss.js';
-import { callGetStaticPaths, RouteCache, RouteCacheEntry } from '../ssr/route-cache.js';
+import { preload as ssrPreload } from '../render/dev/index.js';
+import { generateRssFunction } from '../render/rss.js';
+import { callGetStaticPaths, RouteCache, RouteCacheEntry } from '../render/route-cache.js';
 
 export interface CollectPagesDataOptions {
 	astroConfig: AstroConfig;

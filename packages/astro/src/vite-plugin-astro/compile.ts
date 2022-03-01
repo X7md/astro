@@ -9,26 +9,30 @@ import { transform } from '@astrojs/compiler';
 import { transformWithVite } from './styles.js';
 
 type CompilationCache = Map<string, CompileResult>;
+type CompileResult = TransformResult & { rawCSSDeps: Set<string> };
+
+/**
+ * Note: this is currently needed because Astro is directly using a Vite internal CSS transform. This gives us
+ * some nice features out of the box, but at the expense of also running Vite's CSS postprocessing build step,
+ * which does some things that we don't like, like resolving/handling `@import` too early. This function pulls
+ * out the `@import` tags to be added back later, and then finally handled correctly by Vite.
+ *
+ * In the future, we should remove this workaround and most likely implement our own Astro style handling without
+ * having to hook into Vite's internals.
+ */
+function createImportPlaceholder(spec: string) {
+	// Note: We keep this small so that we can attempt to exactly match the # of characters in the original @import.
+	// This keeps sourcemaps accurate (to the best of our ability) at the intermediate step where this appears.
+	// ->  `@import '${spec}';`;
+	return `/*IMPORT:${spec}*/`;
+}
+function safelyReplaceImportPlaceholder(code: string) {
+	return code.replace(/\/\*IMPORT\:(.*?)\*\//g, `@import '$1';`);
+}
 
 const configCache = new WeakMap<AstroConfig, CompilationCache>();
 
-// https://github.com/vitejs/vite/discussions/5109#discussioncomment-1450726
-function isSSR(options: undefined | boolean | { ssr: boolean }): boolean {
-	if (options === undefined) {
-		return false;
-	}
-	if (typeof options === 'boolean') {
-		return options;
-	}
-	if (typeof options == 'object') {
-		return !!options.ssr;
-	}
-	return false;
-}
-
-type CompileResult = TransformResult & { rawCSSDeps: Set<string> };
-
-async function compile(config: AstroConfig, filename: string, source: string, viteTransform: TransformHook, opts: boolean | undefined): Promise<CompileResult> {
+async function compile(config: AstroConfig, filename: string, source: string, viteTransform: TransformHook, opts: { ssr: boolean }): Promise<CompileResult> {
 	// pages and layouts should be transformed as full documents (implicit <head> <body> etc)
 	// everything else is treated as a fragment
 	const filenameURL = new URL(`file://${filename}`);
@@ -58,9 +62,15 @@ async function compile(config: AstroConfig, filename: string, source: string, vi
 			try {
 				// In the static build, grab any @import as CSS dependencies for HMR.
 				if (config.buildOptions.experimentalStaticBuild) {
-					value.replace(/(?:@import)\s(?:url\()?\s?["\'](.*?)["\']\s?\)?(?:[^;]*);?/gi, (match, spec) => {
+					value = value.replace(/(?:@import)\s(?:url\()?\s?["\'](.*?)["\']\s?\)?(?:[^;]*);?/gi, (match, spec) => {
 						rawCSSDeps.add(spec);
-						return match;
+						// If the language is CSS: prevent `@import` inlining to prevent scoping of imports.
+						// Otherwise: Sass, etc. need to see imports for variables, so leave in for their compiler to handle.
+						if (lang === '.css') {
+							return createImportPlaceholder(spec);
+						} else {
+							return match;
+						}
 					});
 				}
 
@@ -69,7 +79,7 @@ async function compile(config: AstroConfig, filename: string, source: string, vi
 					lang,
 					id: normalizedID,
 					transformHook: viteTransform,
-					ssr: isSSR(opts),
+					ssr: opts.ssr,
 				});
 
 				let map: SourceMapInput | undefined;
@@ -81,7 +91,7 @@ async function compile(config: AstroConfig, filename: string, source: string, vi
 						map = result.map.toString();
 					}
 				}
-				const code = result.code;
+				const code = safelyReplaceImportPlaceholder(result.code);
 				return { code, map };
 			} catch (err) {
 				// save error to throw in plugin context
@@ -119,7 +129,7 @@ export async function cachedCompilation(
 	filename: string,
 	source: string | null,
 	viteTransform: TransformHook,
-	opts: boolean | undefined
+	opts: { ssr: boolean }
 ): Promise<CompileResult> {
 	let cache: CompilationCache;
 	if (!configCache.has(config)) {

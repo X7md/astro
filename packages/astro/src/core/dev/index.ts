@@ -4,7 +4,7 @@ import { performance } from 'perf_hooks';
 import type { AstroConfig } from '../../@types/astro';
 import { createVite } from '../create-vite.js';
 import { defaultLogOptions, info, LogOptions } from '../logger.js';
-import vite from '../vite.js';
+import * as vite from 'vite';
 import * as msg from '../messages.js';
 
 export interface DevOptions {
@@ -33,7 +33,7 @@ export default async function dev(config: AstroConfig, options: DevOptions = { l
 		},
 		config.vite || {}
 	);
-	const viteConfig = await createVite(viteUserConfig, { astroConfig: config, logging: options.logging });
+	const viteConfig = await createVite(viteUserConfig, { astroConfig: config, logging: options.logging, mode: 'dev' });
 	const viteServer = await vite.createServer(viteConfig);
 	await viteServer.listen(config.devOptions.port);
 	const address = viteServer.httpServer!.address() as AddressInfo;

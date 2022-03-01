@@ -1,18 +1,16 @@
-import type vite from '../core/vite';
+import type * as vite from 'vite';
 import type http from 'http';
 import type { AstroConfig, ManifestData, RouteData } from '../@types/astro';
 import { info, LogOptions } from '../core/logger.js';
-import { fileURLToPath } from 'url';
-import { createRouteManifest, matchRoute } from '../core/ssr/routing.js';
-import mime from 'mime';
+import { createRouteManifest, matchRoute } from '../core/routing/index.js';
 import stripAnsi from 'strip-ansi';
 import { createSafeError } from '../core/util.js';
-import { ssr } from '../core/ssr/index.js';
+import { ssr } from '../core/render/dev/index.js';
 import * as msg from '../core/messages.js';
 
 import notFoundTemplate, { subpathNotUsedTemplate } from '../template/4xx.js';
 import serverErrorTemplate from '../template/5xx.js';
-import { RouteCache } from '../core/ssr/route-cache.js';
+import { RouteCache } from '../core/render/route-cache.js';
 
 interface AstroPluginOptions {
 	config: AstroConfig;
@@ -31,8 +29,8 @@ function removeViteHttpMiddleware(server: vite.Connect.Server) {
 
 function writeHtmlResponse(res: http.ServerResponse, statusCode: number, html: string) {
 	res.writeHead(statusCode, {
-		'Content-Type': mime.getType('.html') as string,
-		'Content-Length': Buffer.byteLength(html, 'utf8'),
+		'Content-Type': 'text/html; charset=utf-8',
+		'Content-Length': Buffer.byteLength(html, 'utf-8'),
 	});
 	res.write(html);
 	res.end();
@@ -113,7 +111,6 @@ async function handleRequest(
 			routeCache: routeCache,
 			viteServer: viteServer,
 		});
-		info(logging, 'astro', msg.req({ url: pathname, statusCode, reqTime: performance.now() - reqStart }));
 		writeHtmlResponse(res, statusCode, html);
 	} catch (_err: any) {
 		info(logging, 'astro', msg.req({ url: pathname, statusCode: 500 }));
@@ -126,7 +123,6 @@ export default function createPlugin({ config, logging }: AstroPluginOptions): v
 	return {
 		name: 'astro:server',
 		configureServer(viteServer) {
-			const pagesDirectory = fileURLToPath(config.pages);
 			let routeCache = new RouteCache(logging);
 			let manifest: ManifestData = createRouteManifest({ config: config }, logging);
 			/** rebuild the route cache + manifest, as needed. */
