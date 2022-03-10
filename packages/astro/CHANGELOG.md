@@ -1,5 +1,101 @@
 # astro
 
+## 0.24.0-next.1
+
+### Minor Changes
+
+- [`af075d81`](https://github.com/withastro/astro/commit/af075d81579d0a77f773435bbce391e42f9dff21) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Visual redesign of the `astro dev` CLI, including new `astro --help` and `astro --version` outputs.
+
+  These changes introduce a new startup screen, make it more obvious when a file triggers in-place HMR (`update`) or a full reload (`reload`), and improve the way Astro surfaces errors during dev.
+
+* [#2747](https://github.com/withastro/astro/pull/2747) [`05b66bd6`](https://github.com/withastro/astro/commit/05b66bd68b173d30921c9f0565b3dc2379039fcd) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Escape HTML inside of expressions by default. Please see [our migration guide](https://docs.astro.build/en/migrate/#deprecated-unescaped-html) for more details.
+
+### Patch Changes
+
+- [#2695](https://github.com/withastro/astro/pull/2695) [`ae8d9256`](https://github.com/withastro/astro/commit/ae8d925666dac0008d8a607afa5f6223f95689a4) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Update `Astro.slots` API with new public `has` and `render` methods.
+
+  This is a backwards-compatible change—`Astro.slots.default` will still be `true` if the component has been passed a `default` slot.
+
+  ```ts
+  if (Astro.slots.has('default')) {
+    const content = await Astro.slots.render('default');
+  }
+  ```
+
+* [#2705](https://github.com/withastro/astro/pull/2705) [`72c2c86e`](https://github.com/withastro/astro/commit/72c2c86e9d7c9b2ce6be13ddb273d4b0b11a5723) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Fixes the static build to write to 404.html
+
+- [#2737](https://github.com/withastro/astro/pull/2737) [`e8d4e568`](https://github.com/withastro/astro/commit/e8d4e56803d21cd187bd7d72899ba5d545522786) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Astro's logger has been redesigned for an improved experience! In addition to deduping identical messages, we've surfaced more error details and exposed new events like `update` (for in-place HMR) and `reload` (for full-reload HMR).
+
+* [#2733](https://github.com/withastro/astro/pull/2733) [`6bf124fb`](https://github.com/withastro/astro/commit/6bf124fb2f8ffd3909148ccc0e253c1f72f364cb) Thanks [@FredKSchott](https://github.com/FredKSchott)! - Remove a bad dev warning
+
+- [#2732](https://github.com/withastro/astro/pull/2732) [`0ae96bb7`](https://github.com/withastro/astro/commit/0ae96bb7491a60eb2032bab23377ca54951a67a7) Thanks [@bholmesdev](https://github.com/bholmesdev)! - Update server start message to use localhost for local hostnames
+
+## 0.24.0-next.0
+
+### Minor Changes
+
+- [#2705](https://github.com/withastro/astro/pull/2705) [`8ce63ee6`](https://github.com/withastro/astro/commit/8ce63ee658677ecabcb3068f00413b51e7db30ef) Thanks [@natemoo-re](https://github.com/natemoo-re)! - New default build strategy
+
+  This change marks the "static build" as the new default build strategy. If you are unfamiliar with this build strategy check out the [migration guide](https://docs.astro.build/en/migrate/#planned-deprecations) on how to change your code to be compatible with this new bulid strategy.
+
+  If you'd like to keep using the old build strategy, use the flag `--legacy-build` both in your `astro dev` and `astro build` scripts, for ex:
+
+  ```json
+  {
+    "scripts": {
+      "build": "astro build --legacy-build"
+    }
+  }
+  ```
+
+  Note that the legacy build _is_ deprecated and will be removed in a future version. You should only use this flag until you have the time to migration your code.
+
+  - **Updated `<head>` and `<body>` behavior**
+
+  Since `astro@0.21`, Astro placed certain restrictions on what files could use `<head>` or `<body>` tags. In `astro@0.24`, the restrictions have been lifted. Astro will be able to correctly handle `<head>` and `<body>` tags in _any_ component, not just those in `src/pages/` or `src/layouts/`.
+
+### Patch Changes
+
+- [#2705](https://github.com/withastro/astro/pull/2705) [`176d4082`](https://github.com/withastro/astro/commit/176d4082ca642e3d7b996529f1efed7048b4d04f) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Fixes use of private .env variables with the static build
+
+* [#2705](https://github.com/withastro/astro/pull/2705) [`a483c044`](https://github.com/withastro/astro/commit/a483c0446ba222edf4258f4683cd918ea209b8f4) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Replace `send` dependency with `sirv`
+
+## 0.23.7
+
+### Patch Changes
+
+- Updated dependencies [[`0d37f8e0`](https://github.com/withastro/astro/commit/0d37f8e0a51ac7bcf9e108151828b733bbba6e94)]:
+  - @astrojs/renderer-svelte@0.5.1
+
+## 0.23.6
+
+### Patch Changes
+
+- Updated dependencies [[`5f91e007`](https://github.com/withastro/astro/commit/5f91e007cbbb3a5ff7322964d811844b0921db61)]:
+  - @astrojs/renderer-svelte@0.5.0
+
+## 0.23.5
+
+### Patch Changes
+
+- [#2706](https://github.com/withastro/astro/pull/2706) [`b2c37385`](https://github.com/withastro/astro/commit/b2c37385f94614232d9a378ef2ef3264d5405cc8) Thanks [@JuanM04](https://github.com/JuanM04)! - Changed `data-astro-raw` to `is:raw` internally
+
+- Updated dependencies [[`b2c37385`](https://github.com/withastro/astro/commit/b2c37385f94614232d9a378ef2ef3264d5405cc8)]:
+  - @astrojs/markdown-remark@0.6.4
+
+## 0.23.4
+
+### Patch Changes
+
+- [#2678](https://github.com/withastro/astro/pull/2678) [`caf9135c`](https://github.com/withastro/astro/commit/caf9135c4843889c2773667d591d72d796e14c7b) Thanks [@JuanM04](https://github.com/JuanM04)! - Upgraded Vite to v2.8.6
+
+* [#2697](https://github.com/withastro/astro/pull/2697) [`91765d79`](https://github.com/withastro/astro/commit/91765d79b1ec1181417fb6a4604a9e20564bb10e) Thanks [@FredKSchott](https://github.com/FredKSchott)! - Improve build performance by processing `ssrPreload` in serial rather than in parallel
+
+- [#2684](https://github.com/withastro/astro/pull/2684) [`c7bbb112`](https://github.com/withastro/astro/commit/c7bbb1128936207164cb5ac0c0ad9b1af86d861e) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Fix issue where HMR could be triggered during `astro build`
+
+- Updated dependencies [[`91765d79`](https://github.com/withastro/astro/commit/91765d79b1ec1181417fb6a4604a9e20564bb10e)]:
+  - @astrojs/markdown-remark@0.6.3
+
 ## 0.23.3
 
 ### Patch Changes

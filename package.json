@@ -7,13 +7,13 @@
     "url": "https://github.com/withastro/astro.git"
   },
   "scripts": {
-    "release": "yarn build && changeset publish",
+    "release": "pnpm run build && changeset publish",
     "build": "turbo run build --no-deps --scope=astro --scope=create-astro --scope=\"@astrojs/*\"",
     "build:examples": "turbo run build --scope=\"@example/*\"",
     "dev": "turbo run dev --no-deps --no-cache --parallel --scope=astro --scope=create-astro --scope=\"@astrojs/*\"",
-    "test": "turbo run test --scope=astro",
-    "test:match": "cd packages/astro && yarn run test:match",
-    "test:templates": "turbo run test --scope=create-astro",
+    "test": "pnpm run test --filter astro --filter @astrojs/webapi",
+    "test:match": "cd packages/astro && pnpm run test:match",
+    "test:templates": "pnpm run test --filter create-astro",
     "test:smoke": "node scripts/smoke/index.js",
     "benchmark": "turbo run benchmark --scope=astro",
     "lint": "eslint \"packages/**/*.ts\"",
@@ -28,37 +28,45 @@
     "examples/component/demo",
     "examples/component/packages/*",
     "scripts",
-    "scripts/smoke/*",
+    "smoke/*",
     "packages/astro/test/fixtures/builtins/packages/*",
     "packages/astro/test/fixtures/builtins-polyfillnode",
     "packages/astro/test/fixtures/custom-elements/my-component-lib",
     "packages/astro/test/fixtures/static build/pkg"
   ],
-  "volta": {
-    "node": "14.17.0",
-    "npm": "7.11.2",
-    "yarn": "1.22.10"
+  "engines": {
+    "node": "^14.15.0 || >=16.0.0",
+    "pnpm": ">=6.32.3"
+  },
+  "packageManager": "pnpm@6.32.3",
+  "pnpm": {
+    "peerDependencyRules": {
+      "ignoreMissing": [
+        "@babel/core",
+        "@babel/plugin-transform-react-jsx",
+        "vite"
+      ]
+    }
+  },
+  "dependencies": {
+    "@astrojs/webapi": "workspace:*"
   },
   "devDependencies": {
-    "@changesets/changelog-github": "^0.4.2",
-    "@changesets/cli": "^2.16.0",
-    "@octokit/action": "^3.15.4",
-    "@typescript-eslint/eslint-plugin": "^5.0.0",
-    "@typescript-eslint/parser": "^5.0.0",
+    "@changesets/changelog-github": "^0.4.3",
+    "@changesets/cli": "^2.21.1",
+    "@octokit/action": "^3.18.0",
+    "@typescript-eslint/eslint-plugin": "^5.14.0",
+    "@typescript-eslint/parser": "^5.14.0",
     "del": "^6.0.0",
     "esbuild": "0.13.7",
-    "eslint": "^8.0.1",
-    "eslint-config-prettier": "^8.3.0",
+    "eslint": "^8.10.0",
+    "eslint-config-prettier": "^8.5.0",
     "eslint-plugin-prettier": "^4.0.0",
-    "execa": "^6.0.0",
-    "prettier": "^2.4.1",
+    "execa": "^6.1.0",
+    "prettier": "^2.5.1",
     "pretty-bytes": "^6.0.0",
-    "tiny-glob": "^0.2.8",
-    "turbo": "^1.0.0",
+    "tiny-glob": "^0.2.9",
+    "turbo": "^1.1.5",
     "typescript": "4.5.2"
-  },
-  "engines": {
-    "node": "^14.15.0 || >=16.0.0"
-  },
-  "packageManager": "yarn@1.22.5"
+  }
 }

@@ -1,5 +1,19 @@
 # @astrojs/renderer-svelte
 
+## 0.5.1
+
+### Patch Changes
+
+- [#2722](https://github.com/withastro/astro/pull/2722) [`0d37f8e0`](https://github.com/withastro/astro/commit/0d37f8e0a51ac7bcf9e108151828b733bbba6e94) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Temporarily revert [#2715](https://github.com/withastro/astro/pull/2715) to fix `.svelte` files breaking in the static build.
+
+## 0.5.0
+
+### Minor Changes
+
+- [#2715](https://github.com/withastro/astro/pull/2715) [`5f91e007`](https://github.com/withastro/astro/commit/5f91e007cbbb3a5ff7322964d811844b0921db61) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Internally, we'll now use Vite to preprocess assets rather than pulling in `svelte-preprocess`.
+
+  > This removes the default warnings about missing `postcss-load-config`
+
 ## 0.4.0
 
 ### Minor Changes

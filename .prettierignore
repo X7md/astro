@@ -1,10 +1,22 @@
+# To be removed with ".astro" parsing is ready
+# Also, be sure to remove "pluginSearchDirs" from config
+**/*.astro
+
+# Deep Directories
 **/dist
+**/smoke
 **/node_modules
 **/fixtures
 **/vendor
 **/.vercel
 examples/docs/**/*.md
 examples/blog/**/*.md
+
+# Directories
 .github
 .changeset
+
+# Files
 README.md
+packages/webapi/mod.d.ts
+pnpm-lock.yaml

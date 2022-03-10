@@ -26,11 +26,6 @@ export const AstroConfigSchema = z.object({
 		.optional()
 		.default('./src/pages')
 		.transform((val) => new URL(val)),
-	layouts: z
-		.string()
-		.optional()
-		.default('./src/layouts')
-		.transform((val) => new URL(val)),
 	public: z
 		.string()
 		.optional()
@@ -44,8 +39,6 @@ export const AstroConfigSchema = z.object({
 	renderers: z.array(z.string()).optional().default(['@astrojs/renderer-svelte', '@astrojs/renderer-vue', '@astrojs/renderer-react', '@astrojs/renderer-preact']),
 	markdownOptions: z
 		.object({
-			footnotes: z.boolean().optional(),
-			gfm: z.boolean().optional(),
 			render: z.any().optional().default(['@astrojs/markdown-remark', {}]),
 		})
 		.strict()
@@ -62,7 +55,8 @@ export const AstroConfigSchema = z.object({
 				.union([z.literal('file'), z.literal('directory')])
 				.optional()
 				.default('directory'),
-			experimentalStaticBuild: z.boolean().optional().default(false),
+			legacyBuild: z.boolean().optional().default(false),
+			experimentalStaticBuild: z.boolean().optional().default(true),
 			experimentalSsr: z.boolean().optional().default(false),
 			drafts: z.boolean().optional().default(false),
 		})
@@ -100,10 +94,6 @@ export async function validateConfig(userConfig: any, root: string): Promise<Ast
 			.string()
 			.default('./src/pages')
 			.transform((val) => new URL(addTrailingSlash(val), fileProtocolRoot)),
-		layouts: z
-			.string()
-			.default('./src/layouts')
-			.transform((val) => new URL(addTrailingSlash(val), fileProtocolRoot)),
 		public: z
 			.string()
 			.default('./public')
@@ -123,6 +113,10 @@ function addTrailingSlash(str: string): string {
 
 /** Convert the generic "yargs" flag object into our own, custom TypeScript object. */
 function resolveFlags(flags: Partial<Flags>): CLIFlags {
+	if (flags.experimentalStaticBuild) {
+		// eslint-disable-next-line no-console
+		console.warn(`Passing --experimental-static-build is no longer necessary and is now the default. The flag will be removed in a future version of Astro.`);
+	}
 	return {
 		projectRoot: typeof flags.projectRoot === 'string' ? flags.projectRoot : undefined,
 		site: typeof flags.site === 'string' ? flags.site : undefined,
@@ -130,7 +124,7 @@ function resolveFlags(flags: Partial<Flags>): CLIFlags {
 		port: typeof flags.port === 'number' ? flags.port : undefined,
 		config: typeof flags.config === 'string' ? flags.config : undefined,
 		hostname: typeof flags.hostname === 'string' ? flags.hostname : undefined,
-		experimentalStaticBuild: typeof flags.experimentalStaticBuild === 'boolean' ? flags.experimentalStaticBuild : false,
+		legacyBuild: typeof flags.legacyBuild === 'boolean' ? flags.legacyBuild : false,
 		experimentalSsr: typeof flags.experimentalSsr === 'boolean' ? flags.experimentalSsr : false,
 		drafts: typeof flags.drafts === 'boolean' ? flags.drafts : false,
 	};
@@ -144,11 +138,11 @@ function mergeCLIFlags(astroConfig: AstroUserConfig, flags: CLIFlags) {
 	if (typeof flags.site === 'string') astroConfig.buildOptions.site = flags.site;
 	if (typeof flags.port === 'number') astroConfig.devOptions.port = flags.port;
 	if (typeof flags.hostname === 'string') astroConfig.devOptions.hostname = flags.hostname;
-	if (typeof flags.experimentalStaticBuild === 'boolean') astroConfig.buildOptions.experimentalStaticBuild = flags.experimentalStaticBuild;
+	if (typeof flags.legacyBuild === 'boolean') astroConfig.buildOptions.legacyBuild = flags.legacyBuild;
 	if (typeof flags.experimentalSsr === 'boolean') {
 		astroConfig.buildOptions.experimentalSsr = flags.experimentalSsr;
 		if (flags.experimentalSsr) {
-			astroConfig.buildOptions.experimentalStaticBuild = true;
+			astroConfig.buildOptions.legacyBuild = false;
 		}
 	}
 	if (typeof flags.drafts === 'boolean') astroConfig.buildOptions.drafts = flags.drafts;

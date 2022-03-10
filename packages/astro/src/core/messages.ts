@@ -3,38 +3,72 @@
  */
 
 import type { AddressInfo } from 'net';
-import { bold, dim, green, magenta, yellow } from 'kleur/colors';
-import { pad } from './dev/util.js';
+import stripAnsi from 'strip-ansi';
+import { bold, dim, red, green, magenta, yellow, cyan, bgGreen, black } from 'kleur/colors';
+import { pad, emoji } from './dev/util.js';
+
+const PREFIX_PADDING = 6;
 
 /** Display  */
 export function req({ url, statusCode, reqTime }: { url: string; statusCode: number; reqTime?: number }): string {
 	let color = dim;
-	if (statusCode >= 500) color = magenta;
+	if (statusCode >= 500) color = red;
 	else if (statusCode >= 400) color = yellow;
 	else if (statusCode >= 300) color = dim;
 	else if (statusCode >= 200) color = green;
-	return `${color(statusCode)} ${pad(url, 40)} ${reqTime ? dim(Math.round(reqTime) + 'ms') : ''}`;
+	return `${bold(color(pad(`${statusCode}`, PREFIX_PADDING)))} ${pad(url, 40)} ${reqTime ? dim(Math.round(reqTime) + 'ms') : ''}`.trim();
 }
 
-/** Display  */
-export function reload({ url, reqTime }: { url: string; reqTime: number }): string {
-	let color = yellow;
-	return `${pad(url, 40)} ${dim(Math.round(reqTime) + 'ms')}`;
+export function reload({ file }: { file: string }): string {
+	return `${green(pad('reload', PREFIX_PADDING))} ${file}`;
+}
+
+export function hmr({ file }: { file: string }): string {
+	return `${green(pad('update', PREFIX_PADDING))} ${file}`;
 }
 
 /** Display dev server host and startup time */
-export function devStart({ startupTime }: { startupTime: number }): string {
-	return `${pad(`Server started`, 44)} ${dim(`${Math.round(startupTime)}ms`)}`;
-}
-
-/** Display dev server host */
-export function devHost({ address, https, site }: { address: AddressInfo; https: boolean; site: URL | undefined }): string {
+export function devStart({
+	startupTime,
+	port,
+	localAddress,
+	networkAddress,
+	https,
+	site,
+}: {
+	startupTime: number;
+	port: number;
+	localAddress: string;
+	networkAddress: string;
+	https: boolean;
+	site: URL | undefined;
+}): string {
+	// PACAKGE_VERSION is injected at build-time
+	const version = process.env.PACKAGE_VERSION ?? '0.0.0';
 	const rootPath = site ? site.pathname : '/';
-	const displayUrl = `${https ? 'https' : 'http'}://${address.address}:${address.port}${rootPath}`;
-	return `Local: ${bold(magenta(displayUrl))}`;
+	const toDisplayUrl = (hostname: string) => `${https ? 'https' : 'http'}://${hostname}:${port}${rootPath}`;
+	const messages = [
+		`${emoji('🚀 ', '')}${bgGreen(black(` astro `))} ${green(`v${version}`)} ${dim(`started in ${Math.round(startupTime)}ms`)}`,
+		'',
+		`${dim('┃')} Local    ${bold(cyan(toDisplayUrl(localAddress)))}`,
+		`${dim('┃')} Network  ${bold(cyan(toDisplayUrl(networkAddress)))}`,
+		'',
+	];
+	return messages.map((msg) => `  ${msg}`).join('\n');
 }
 
 /** Display port in use */
 export function portInUse({ port }: { port: number }): string {
 	return `Port ${port} in use. Trying a new one…`;
+}
+
+/** Pretty-print errors */
+export function err(error: Error): string {
+	if (!error.stack) return stripAnsi(error.message);
+	let message = stripAnsi(error.message);
+	let stack = stripAnsi(error.stack);
+	const split = stack.indexOf(message) + message.length;
+	message = stack.slice(0, split);
+	stack = stack.slice(split).replace(/^\n+/, '');
+	return `${message}\n${dim(stack)}`;
 }

@@ -48,13 +48,6 @@ describe('Astro.*', () => {
 		expect($('#site').attr('href')).to.equal('https://mysite.dev/blog/');
 	});
 
-	it('Astro.resolve built', async () => {
-		const html = await fixture.readFile('/resolve/index.html');
-		const $ = cheerio.load(html);
-		expect($('img').attr('src')).to.include('assets/penguin.ccd44411.png'); // Main src/images
-		expect($('#inner-child img').attr('src')).to.include('assets/penguin.b9ab122a.png');
-	});
-
 	it('Astro.fetchContent() returns the correct "url" property, including buildOptions.site subpath', async () => {
 		const html = await fixture.readFile('/posts/1/index.html');
 		const $ = cheerio.load(html);

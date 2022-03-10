@@ -14,7 +14,6 @@ describe("Static build - pageUrlFormat: 'file'", () => {
 			projectRoot: './fixtures/static-build-page-url-format/',
 			renderers: [],
 			buildOptions: {
-				experimentalStaticBuild: true,
 				site: 'http://example.com/subpath/',
 				pageUrlFormat: 'file',
 			},
@@ -23,12 +22,12 @@ describe("Static build - pageUrlFormat: 'file'", () => {
 	});
 
 	it('Builds pages in root', async () => {
-		const html = await fixture.readFile('/subpath/one.html');
+		const html = await fixture.readFile('/one.html');
 		expect(html).to.be.a('string');
 	});
 
 	it('Builds pages in subfolders', async () => {
-		const html = await fixture.readFile('/subpath/sub/page.html');
+		const html = await fixture.readFile('/sub/page.html');
 		expect(html).to.be.a('string');
 	});
 });

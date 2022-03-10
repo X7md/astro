@@ -1,5 +1,5 @@
 import { execa } from 'execa';
-import { polyfill } from '@astropub/webapi';
+import { polyfill } from '@astrojs/webapi';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { loadConfig } from '../dist/core/config.js';
@@ -7,6 +7,7 @@ import dev from '../dist/core/dev/index.js';
 import build from '../dist/core/build/index.js';
 import preview from '../dist/core/preview/index.js';
 import os from 'os';
+import stripAnsi from 'strip-ansi';
 
 // polyfill WebAPIs to globalThis for Node v12, Node v14, and Node v16
 polyfill(globalThis, {
@@ -122,6 +123,24 @@ export function cli(/** @type {string[]} */ ...args) {
 	spawned.stdout.setEncoding('utf8');
 
 	return spawned;
+}
+
+export async function parseCliDevStart(proc) {
+	let stdout = '';
+
+	for await (const chunk of proc.stdout) {
+		stdout += chunk;
+
+		if (chunk.includes('Local')) break;
+	}
+
+	proc.kill();
+	stdout = stripAnsi(stdout);
+	const messages = stdout
+		.split('\n')
+		.filter((ln) => !!ln.trim())
+		.map((ln) => ln.replace(/[🚀┃]/g, '').replace(/\s+/g, ' ').trim());
+	return { messages };
 }
 
 export const isWindows = os.platform() === 'win32';

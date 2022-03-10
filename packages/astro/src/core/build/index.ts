@@ -3,7 +3,7 @@ import type { LogOptions } from '../logger';
 
 import fs from 'fs';
 import * as colors from 'kleur/colors';
-import { polyfill } from '@astropub/webapi';
+import { polyfill } from '@astrojs/webapi';
 import { performance } from 'perf_hooks';
 import * as vite from 'vite';
 import { createVite, ViteConfigWithSSR } from '../create-vite.js';
@@ -110,7 +110,7 @@ class AstroBuilder {
 		timer.buildStart = performance.now();
 
 		// Use the new faster static based build.
-		if (this.config.buildOptions.experimentalStaticBuild) {
+		if (!this.config.buildOptions.legacyBuild) {
 			await staticBuild({
 				allPages,
 				astroConfig: this.config,

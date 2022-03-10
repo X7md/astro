@@ -1,5 +1,17 @@
 # @astrojs/markdown-remark
 
+## 0.6.4
+
+### Patch Changes
+
+- [#2706](https://github.com/withastro/astro/pull/2706) [`b2c37385`](https://github.com/withastro/astro/commit/b2c37385f94614232d9a378ef2ef3264d5405cc8) Thanks [@JuanM04](https://github.com/JuanM04)! - Changed `data-astro-raw` to `is:raw` internally
+
+## 0.6.3
+
+### Patch Changes
+
+- [#2697](https://github.com/withastro/astro/pull/2697) [`91765d79`](https://github.com/withastro/astro/commit/91765d79b1ec1181417fb6a4604a9e20564bb10e) Thanks [@FredKSchott](https://github.com/FredKSchott)! - Improve performance by optimizing calls to `getHighlighter`
+
 ## 0.6.2
 
 ### Patch Changes
