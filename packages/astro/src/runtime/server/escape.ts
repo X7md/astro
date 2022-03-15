@@ -1,17 +1,31 @@
-const entities = { '"': 'quot', '&': 'amp', "'": 'apos', '<': 'lt', '>': 'gt' } as const;
+import { escape } from 'html-escaper';
 
-export const escapeHTML = (string: any) => string.replace(/["'&<>]/g, (char: keyof typeof entities) => '&' + entities[char] + ';');
-
-/**
- * RawString is a "blessed" version of String
- * that is not subject to escaping.
- */
-export class UnescapedString extends String {}
+// Leverage the battle-tested `html-escaper` npm package.
+export const escapeHTML = escape;
 
 /**
- * unescapeHTML marks a string as raw, unescaped HTML.
- * This should only be generated internally, not a public API.
- *
- * Need to cast the return value `as unknown as string` so TS doesn't yell at us.
+ * A "blessed" extension of String that tells Astro that the string
+ * has already been escaped. This helps prevent double-escaping of HTML.
  */
-export const unescapeHTML = (str: any) => new UnescapedString(str) as unknown as string;
+export class HTMLString extends String {}
+
+/**
+ * markHTMLString marks a string as raw or "already escaped" by returning
+ * a `HTMLString` instance. This is meant for internal use, and should not
+ * be returned through any public JS API.
+ */
+export const markHTMLString = (value: any) => {
+	// If value is already marked as an HTML string, there is nothing to do.
+	if (value instanceof HTMLString) {
+		return value;
+	}
+	// Cast to `HTMLString` to mark the string as valid HTML. Any HTML escaping
+	// and sanitization should have already happened to the `value` argument.
+	// NOTE: `unknown as string` is necessary for TypeScript to treat this as `string`
+	if (typeof value === 'string') {
+		return new HTMLString(value) as unknown as string;
+	}
+	// Return all other values (`number`, `null`, `undefined`) as-is.
+	// The compiler will recursively stringify these correctly at a later stage.
+	return value;
+};

@@ -1,5 +1,147 @@
 # astro
 
+## 0.24.2
+
+### Patch Changes
+
+- [#2801](https://github.com/withastro/astro/pull/2801) [`11fb3745`](https://github.com/withastro/astro/commit/11fb3745dd548c6a8fa94c6a29e0ee89bac591aa) Thanks [@FredKSchott](https://github.com/FredKSchott)! - Fix: Handle CLI output in a cross-compat way
+
+* [#2793](https://github.com/withastro/astro/pull/2793) [`6eb49479`](https://github.com/withastro/astro/commit/6eb494796e5144a4f2c12a6cce3fb2345c9b4e4e) Thanks [@FredKSchott](https://github.com/FredKSchott)! - Fix HTML double-escaping issue
+
+- [#2803](https://github.com/withastro/astro/pull/2803) [`2b76ee8d`](https://github.com/withastro/astro/commit/2b76ee8d75d44492af18b9ead35293da7178930a) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Add an `astro/config` entrypoint with a `defineConfig` utility.
+
+  Config files can now be easily benefit from Intellisense using the following approach:
+
+  ```js
+  import { defineConfig } from 'astro/config';
+
+  export default defineConfig({
+    renderers: [],
+  });
+  ```
+
+* [#2791](https://github.com/withastro/astro/pull/2791) [`2d95541b`](https://github.com/withastro/astro/commit/2d95541b52118f787144720cb28cdd64644b903a) Thanks [@bholmesdev](https://github.com/bholmesdev)! - Fix missing styles on initial dev server load (ex. Tailwind styles)
+
+## 0.24.1
+
+### Patch Changes
+
+- [#2797](https://github.com/withastro/astro/pull/2797) [`58d8686e`](https://github.com/withastro/astro/commit/58d8686e94816da649b0210f5288173fb4b9a483) Thanks [@matthewp](https://github.com/matthewp)! - Fix for projects with a folder name containing a space
+
+* [#2785](https://github.com/withastro/astro/pull/2785) [`2c4fd919`](https://github.com/withastro/astro/commit/2c4fd919faa887df659d756ed3d095e0e83ed87d) Thanks [@bholmesdev](https://github.com/bholmesdev)! - Update Astro.props to show object properties on console.log(Astro.props), interating over properties, and anything else outside direct key access
+
+- [#2790](https://github.com/withastro/astro/pull/2790) [`6b34840d`](https://github.com/withastro/astro/commit/6b34840d3d082d6491515ff96976f603947316d3) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Improve `set:html` behavior for `null` and `undefined` values
+
+* [#2772](https://github.com/withastro/astro/pull/2772) [`b4d34e2d`](https://github.com/withastro/astro/commit/b4d34e2d2c1429a9938074cd30ed13d9bb741a8b) Thanks [@FredKSchott](https://github.com/FredKSchott)! - Improve build performance, especially on large sites
+
+- [#2772](https://github.com/withastro/astro/pull/2772) [`b4d34e2d`](https://github.com/withastro/astro/commit/b4d34e2d2c1429a9938074cd30ed13d9bb741a8b) Thanks [@FredKSchott](https://github.com/FredKSchott)! - Surface vite warnings to the user
+
+## 0.24.0
+
+### Minor Changes
+
+- [#2760](https://github.com/withastro/astro/pull/2760) [`77b9c953`](https://github.com/withastro/astro/commit/77b9c95352f441021b8a0b03f891ea6ad00117ce) Thanks [@bholmesdev](https://github.com/bholmesdev)! - Introduce a new --host flag + host devOption to expose your server on a network IP
+
+* [`af075d81`](https://github.com/withastro/astro/commit/af075d81579d0a77f773435bbce391e42f9dff21) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Visual redesign of the `astro dev` CLI, including new `astro --help` and `astro --version` outputs.
+
+  These changes introduce a new startup screen, make it more obvious when a file triggers in-place HMR (`update`) or a full reload (`reload`), and improve the way Astro surfaces errors during dev.
+
+- [#2705](https://github.com/withastro/astro/pull/2705) [`72c2c86e`](https://github.com/withastro/astro/commit/72c2c86e9d7c9b2ce6be13ddb273d4b0b11a5723) Thanks [@natemoo-re](https://github.com/natemoo-re)! - New default build strategy
+
+  This change marks the "static build" as the new default build strategy. If you are unfamiliar with this build strategy check out the [migration guide](https://docs.astro.build/en/migrate/#planned-deprecations) on how to change your code to be compatible with this new bulid strategy.
+
+  If you'd like to keep using the old build strategy, use the flag `--legacy-build` both in your `astro dev` and `astro build` scripts, for ex:
+
+  ```json
+  {
+    "scripts": {
+      "build": "astro build --legacy-build"
+    }
+  }
+  ```
+
+  Note that the legacy build _is_ deprecated and will be removed in a future version. You should only use this flag until you have the time to migration your code.
+
+* [#2705](https://github.com/withastro/astro/pull/2705) [`72c2c86e`](https://github.com/withastro/astro/commit/72c2c86e9d7c9b2ce6be13ddb273d4b0b11a5723) Thanks [@natemoo-re](https://github.com/natemoo-re)! - ## Updated `<head>` and `<body>` behavior
+
+  Since `astro@0.21`, Astro placed certain restrictions on what files could use `<head>` or `<body>` tags. In `astro@0.24`, the restrictions have been lifted. Astro will be able to correctly handle `<head>` and `<body>` tags in _any_ component, not just those in `src/pages/` or `src/layouts/`.
+
+- [#2747](https://github.com/withastro/astro/pull/2747) [`05b66bd6`](https://github.com/withastro/astro/commit/05b66bd68b173d30921c9f0565b3dc2379039fcd) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Escape HTML inside of expressions by default. Please see [our migration guide](https://docs.astro.build/en/migrate/#deprecated-unescaped-html) for more details.
+
+### Patch Changes
+
+- [#2695](https://github.com/withastro/astro/pull/2695) [`ae8d9256`](https://github.com/withastro/astro/commit/ae8d925666dac0008d8a607afa5f6223f95689a4) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Update `Astro.slots` API with new public `has` and `render` methods.
+
+  This is a backwards-compatible change—`Astro.slots.default` will still be `true` if the component has been passed a `default` slot.
+
+  ```ts
+  if (Astro.slots.has('default')) {
+    const content = await Astro.slots.render('default');
+  }
+  ```
+
+* [#2755](https://github.com/withastro/astro/pull/2755) [`10843aba`](https://github.com/withastro/astro/commit/10843aba634c9cae663d8181b9d90d3213cb9142) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Add user-configurable `sitemapFilter` option.
+
+  This option can be used to ensure certain pages are excluded from your final sitemap.
+
+  ```ts
+  // astro.config.ts
+  import type { AstroUserConfig } from 'astro';
+
+  const config: AstroUserConfig = {
+    sitemap: true,
+    sitemapFilter: (page: string) => !page.includes('secret-page'),
+  };
+  export default config;
+  ```
+
+- [#2767](https://github.com/withastro/astro/pull/2767) [`2bb2c2f7`](https://github.com/withastro/astro/commit/2bb2c2f7d153863319652dbc93396bedd1a16756) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Update `@astrojs/compiler` to `0.12.0`
+
+* [#2705](https://github.com/withastro/astro/pull/2705) [`72c2c86e`](https://github.com/withastro/astro/commit/72c2c86e9d7c9b2ce6be13ddb273d4b0b11a5723) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Fixes the static build to write to 404.html
+
+- [#2705](https://github.com/withastro/astro/pull/2705) [`72c2c86e`](https://github.com/withastro/astro/commit/72c2c86e9d7c9b2ce6be13ddb273d4b0b11a5723) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Fixes use of private .env variables with the static build
+
+* [#2750](https://github.com/withastro/astro/pull/2750) [`79fc3204`](https://github.com/withastro/astro/commit/79fc320480b2a638ef707079a624519bd54f1550) Thanks [@FredKSchott](https://github.com/FredKSchott)! - update esbuild@0.14.25
+
+- [#2737](https://github.com/withastro/astro/pull/2737) [`e8d4e568`](https://github.com/withastro/astro/commit/e8d4e56803d21cd187bd7d72899ba5d545522786) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Astro's logger has been redesigned for an improved experience! In addition to deduping identical messages, we've surfaced more error details and exposed new events like `update` (for in-place HMR) and `reload` (for full-reload HMR).
+
+* [#2733](https://github.com/withastro/astro/pull/2733) [`6bf124fb`](https://github.com/withastro/astro/commit/6bf124fb2f8ffd3909148ccc0e253c1f72f364cb) Thanks [@FredKSchott](https://github.com/FredKSchott)! - Remove a bad dev warning
+
+- [#2768](https://github.com/withastro/astro/pull/2768) [`49c0d997`](https://github.com/withastro/astro/commit/49c0d9970fe362af06c6ac70c25c1b6b0c4dd393) Thanks [@matthewp](https://github.com/matthewp)! - Fixes loading astro/client/\* on Windows in dev
+
+* [#2758](https://github.com/withastro/astro/pull/2758) [`499fb6a3`](https://github.com/withastro/astro/commit/499fb6a3356967123a7cb9b28f94d9a3bf1dff91) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Add CLI warnings when running a prerelease or outdated version of Astro
+
+- [#2705](https://github.com/withastro/astro/pull/2705) [`72c2c86e`](https://github.com/withastro/astro/commit/72c2c86e9d7c9b2ce6be13ddb273d4b0b11a5723) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Replace `send` dependency with `sirv`
+
+* [#2732](https://github.com/withastro/astro/pull/2732) [`0ae96bb7`](https://github.com/withastro/astro/commit/0ae96bb7491a60eb2032bab23377ca54951a67a7) Thanks [@bholmesdev](https://github.com/bholmesdev)! - Update server start message to use localhost for local hostnames
+
+- [#2743](https://github.com/withastro/astro/pull/2743) [`a14075e2`](https://github.com/withastro/astro/commit/a14075e2a4d8897e24e2928318e653b63637ebe3) Thanks [@bholmesdev](https://github.com/bholmesdev)! - Fix - show 404 for bad static paths with console message, rather than a 500
+
+## 0.24.0-next.2
+
+### Patch Changes
+
+- [#2755](https://github.com/withastro/astro/pull/2755) [`10843aba`](https://github.com/withastro/astro/commit/10843aba634c9cae663d8181b9d90d3213cb9142) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Add user-configurable `sitemapFilter` option.
+
+  This option can be used to ensure certain pages are excluded from your final sitemap.
+
+  ```ts
+  // astro.config.ts
+  import type { AstroUserConfig } from 'astro';
+
+  const config: AstroUserConfig = {
+    sitemap: true,
+    sitemapFilter: (page: string) => !page.includes('secret-page'),
+  };
+  export default config;
+  ```
+
+* [#2750](https://github.com/withastro/astro/pull/2750) [`79fc3204`](https://github.com/withastro/astro/commit/79fc320480b2a638ef707079a624519bd54f1550) Thanks [@FredKSchott](https://github.com/FredKSchott)! - update esbuild@0.14.25
+
+- [#2758](https://github.com/withastro/astro/pull/2758) [`499fb6a3`](https://github.com/withastro/astro/commit/499fb6a3356967123a7cb9b28f94d9a3bf1dff91) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Add CLI warnings when running a prerelease or outdated version of Astro
+
+* [#2743](https://github.com/withastro/astro/pull/2743) [`a14075e2`](https://github.com/withastro/astro/commit/a14075e2a4d8897e24e2928318e653b63637ebe3) Thanks [@bholmesdev](https://github.com/bholmesdev)! - Fix - show 404 for bad static paths with console message, rather than a 500
+
 ## 0.24.0-next.1
 
 ### Minor Changes

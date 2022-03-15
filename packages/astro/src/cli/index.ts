@@ -38,6 +38,7 @@ function printHelp() {
 	title('Flags');
 	table(
 		[
+			['--host [optional IP]', 'Expose server on network'],
 			['--config <path>', 'Specify the path to the Astro config file.'],
 			['--project-root <path>', 'Specify the path to the project root folder.'],
 			['--no-sitemap', 'Disable sitemap generation (build only).'],
@@ -97,7 +98,7 @@ function resolveCommand(flags: Arguments): CLICommand {
 	} else if (flags.help) {
 		return 'help';
 	}
-	const cmd = flags._[2];
+	const cmd = flags._[2] as string;
 	const supportedCommands = new Set(['dev', 'build', 'preview', 'check']);
 	if (supportedCommands.has(cmd)) {
 		return cmd as 'dev' | 'build' | 'preview' | 'check';

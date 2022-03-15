@@ -15,7 +15,7 @@ describe('Development Routing', () => {
 		});
 
 		after(async () => {
-			devServer && (await devServer.stop());
+			await devServer.stop();
 		});
 
 		it('200 when loading /', async () => {
@@ -38,9 +38,9 @@ describe('Development Routing', () => {
 			expect(response.status).to.equal(200);
 		});
 
-		it('500 when loading invalid dynamic route', async () => {
+		it('404 when loading invalid dynamic route', async () => {
 			const response = await fixture.fetch('/2');
-			expect(response.status).to.equal(500);
+			expect(response.status).to.equal(404);
 		});
 	});
 
@@ -56,7 +56,7 @@ describe('Development Routing', () => {
 		});
 
 		after(async () => {
-			devServer && (await devServer.stop());
+			await devServer.stop();
 		});
 
 		it('200 when loading /', async () => {
@@ -74,9 +74,9 @@ describe('Development Routing', () => {
 			expect(response.status).to.equal(200);
 		});
 
-		it('500 when loading invalid dynamic route', async () => {
+		it('404 when loading invalid dynamic route', async () => {
 			const response = await fixture.fetch('/2');
-			expect(response.status).to.equal(500);
+			expect(response.status).to.equal(404);
 		});
 	});
 
@@ -92,7 +92,7 @@ describe('Development Routing', () => {
 		});
 
 		after(async () => {
-			devServer && (await devServer.stop());
+			await devServer.stop();
 		});
 
 		it('404 when loading /', async () => {
@@ -120,9 +120,9 @@ describe('Development Routing', () => {
 			expect(response.status).to.equal(200);
 		});
 
-		it('500 when loading invalid dynamic route', async () => {
+		it('404 when loading invalid dynamic route', async () => {
 			const response = await fixture.fetch('/blog/2/');
-			expect(response.status).to.equal(500);
+			expect(response.status).to.equal(404);
 		});
 	});
 
@@ -138,7 +138,7 @@ describe('Development Routing', () => {
 		});
 
 		after(async () => {
-			devServer && (await devServer.stop());
+			await devServer.stop();
 		});
 
 		it('404 when loading /', async () => {
@@ -166,9 +166,9 @@ describe('Development Routing', () => {
 			expect(response.status).to.equal(200);
 		});
 
-		it('500 when loading invalid dynamic route', async () => {
+		it('404 when loading invalid dynamic route', async () => {
 			const response = await fixture.fetch('/blog/2/');
-			expect(response.status).to.equal(500);
+			expect(response.status).to.equal(404);
 		});
 	});
 
@@ -184,7 +184,7 @@ describe('Development Routing', () => {
 		});
 
 		after(async () => {
-			devServer && (await devServer.stop());
+			await devServer.stop();
 		});
 
 		it('200 when loading /home.json', async () => {

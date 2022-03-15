@@ -8,6 +8,7 @@ import { RouteCache } from '../route-cache.js';
 import { resolveRenderers } from './renderers.js';
 import { errorHandler } from './error.js';
 import { getHmrScript } from './hmr.js';
+import { prependForwardSlash } from '../../path.js';
 import { render as coreRender } from '../core.js';
 import { createModuleScriptElementWithSrcSet } from '../ssr-element.js';
 
@@ -36,7 +37,7 @@ export type ComponentPreload = [Renderer[], ComponentInstance];
 
 const svelteStylesRE = /svelte\?svelte&type=style/;
 
-export async function preload({ astroConfig, filePath, viteServer }: SSROptions): Promise<ComponentPreload> {
+export async function preload({ astroConfig, filePath, viteServer }: Pick<SSROptions, 'astroConfig' | 'filePath' | 'viteServer'>): Promise<ComponentPreload> {
 	// Important: This needs to happen first, in case a renderer provides polyfills.
 	const renderers = await resolveRenderers(viteServer, astroConfig);
 	// Load the module from the Vite SSR Runtime.
@@ -103,7 +104,7 @@ export async function render(renderers: Renderer[], mod: ComponentInstance, ssrO
 			// broken in the legacy build. This can be removed once the legacy build is removed.
 			if (!astroConfig.buildOptions.legacyBuild) {
 				const [, resolvedPath] = await viteServer.moduleGraph.resolveUrl(s);
-				return resolvedPath;
+				return '/@fs' + prependForwardSlash(resolvedPath);
 			} else {
 				return s;
 			}
@@ -173,9 +174,9 @@ export async function render(renderers: Renderer[], mod: ComponentInstance, ssrO
 	return content;
 }
 
-export async function ssr(ssrOpts: SSROptions): Promise<string> {
+export async function ssr(preloadedComponent: ComponentPreload, ssrOpts: SSROptions): Promise<string> {
 	try {
-		const [renderers, mod] = await preload(ssrOpts);
+		const [renderers, mod] = preloadedComponent;
 		return await render(renderers, mod, ssrOpts); // note(drew): without "await", errors won’t get caught by errorHandler()
 	} catch (e: unknown) {
 		await errorHandler(e, { viteServer: ssrOpts.viteServer, filePath: ssrOpts.filePath });

@@ -24,6 +24,7 @@ export interface CLIFlags {
 	projectRoot?: string;
 	site?: string;
 	sitemap?: boolean;
+	host?: string | boolean;
 	hostname?: string;
 	port?: number;
 	config?: string;
@@ -228,6 +229,29 @@ export interface AstroUserConfig {
 
 		/**
 		 * @docs
+		 * @name buildOptions.sitemapFilter
+		 * @typeraw {(page: string) => boolean}
+		 * @see buildOptions.sitemap
+		 * @description
+		 * By default, all pages are included in your generated sitemap.
+		 * You can filter included pages by URL using `buildOptions.sitemapFilter`.
+		 *
+		 * The `page` function parameter is the full URL of your rendered page, including your `buildOptions.site` domain.
+		 * Return `true` to include a page in your sitemap, and `false` to remove it.
+		 *
+		 * ```js
+		 * {
+		 *   buildOptions: {
+		 * 	   sitemap: true
+		 * 	   sitemapFilter: (page) => page !== 'http://example.com/secret-page')
+		 *   }
+		 * }
+		 * ```
+		 */
+		sitemapFilter?: (page: string) => boolean;
+
+		/**
+		 * @docs
 		 * @name buildOptions.pageUrlFormat
 		 * @type {('file' | 'directory')}
 		 * @default `'directory'`
@@ -293,10 +317,27 @@ export interface AstroUserConfig {
 	devOptions?: {
 		/**
 		 * @docs
+		 * @name devOptions.host
+		 * @type {string | boolean}
+		 * @default `false`
+		 * @version 0.24.0
+		 * @description
+		 * Set which network IP addresses the dev server should listen on (i.e. 	non-localhost IPs).
+		 * - `false` - do not expose on a network IP address
+		 * - `true` - listen on all addresses, including LAN and public addresses
+		 * - `[custom-address]` - expose on a network IP address at `[custom-address]`
+		 */
+		host?: string | boolean;
+
+		/**
+		 * @docs
 		 * @name devOptions.hostname
 		 * @type {string}
 		 * @default `'localhost'`
+		 * @deprecated Use `host` instead
 		 * @description
+		 * > **This option is deprecated.** Consider using `host` instead.
+		 *
 		 * Set which IP addresses the dev server should listen on. Set this to 0.0.0.0 to listen on all addresses, including LAN and public addresses.
 		 */
 		hostname?: string;
