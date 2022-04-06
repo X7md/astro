@@ -1,6 +1,7 @@
 import type * as vite from 'vite';
+import type { PluginContext } from 'rollup';
 import type { AstroConfig } from '../@types/astro';
-import type { LogOptions } from '../core/logger.js';
+import type { LogOptions } from '../core/logger/core.js';
 
 import esbuild from 'esbuild';
 import { fileURLToPath } from 'url';
@@ -12,6 +13,8 @@ import { cachedCompilation } from './compile.js';
 import ancestor from 'common-ancestor-path';
 import { trackCSSDependencies, handleHotUpdate } from './hmr.js';
 import { isRelativePath, startsWithForwardSlash } from '../core/path.js';
+import { PAGE_SCRIPT_ID, PAGE_SSR_SCRIPT_ID } from '../vite-plugin-scripts/index.js';
+import { resolvePages } from '../core/util.js';
 
 const FRONTMATTER_PARSE_REGEXP = /^\-\-\-(.*)^\-\-\-/ms;
 interface AstroPluginOptions {
@@ -24,31 +27,31 @@ export default function astro({ config, logging }: AstroPluginOptions): vite.Plu
 	function normalizeFilename(filename: string) {
 		if (filename.startsWith('/@fs')) {
 			filename = filename.slice('/@fs'.length);
-		} else if (filename.startsWith('/') && !ancestor(filename, config.projectRoot.pathname)) {
-			filename = new URL('.' + filename, config.projectRoot).pathname;
+		} else if (filename.startsWith('/') && !ancestor(filename, config.root.pathname)) {
+			filename = new URL('.' + filename, config.root).pathname;
 		}
 		return filename;
 	}
 	function relativeToRoot(pathname: string) {
 		const arg = startsWithForwardSlash(pathname) ? '.' + pathname : pathname;
-		const url = new URL(arg, config.projectRoot);
+		const url = new URL(arg, config.root);
 		return slash(fileURLToPath(url)) + url.search;
 	}
 
-	let isProduction: boolean;
+	let resolvedConfig: vite.ResolvedConfig;
 	let viteTransform: TransformHook;
 	let viteDevServer: vite.ViteDevServer | null = null;
 
 	// Variables for determing if an id starts with /src...
-	const srcRootWeb = config.src.pathname.slice(config.projectRoot.pathname.length - 1);
+	const srcRootWeb = config.srcDir.pathname.slice(config.root.pathname.length - 1);
 	const isBrowserPath = (path: string) => path.startsWith(srcRootWeb);
 
 	return {
 		name: 'astro:build',
 		enforce: 'pre', // run transforms before other plugins can
-		configResolved(resolvedConfig) {
+		configResolved(_resolvedConfig) {
+			resolvedConfig = _resolvedConfig;
 			viteTransform = getViteTransform(resolvedConfig);
-			isProduction = resolvedConfig.isProduction;
 		},
 		configureServer(server) {
 			viteDevServer = server;
@@ -82,24 +85,37 @@ export default function astro({ config, logging }: AstroPluginOptions): vite.Plu
 				return id;
 			}
 		},
-		async load(id, opts) {
-			let { filename, query } = parseAstroRequest(id);
+		async load(this: PluginContext, id, opts) {
+			const parsedId = parseAstroRequest(id);
+			const query = parsedId.query;
+			if (!id.endsWith('.astro') && !query.astro) {
+				return null;
+			}
+
+			const filename = normalizeFilename(parsedId.filename);
+			const fileUrl = new URL(`file://${filename}`);
+			let source = await fs.promises.readFile(fileUrl, 'utf-8');
+			const isPage = fileUrl.pathname.startsWith(resolvePages(config).pathname);
+			if (isPage && config._ctx.scripts.some((s) => s.stage === 'page')) {
+				source += `\n<script src="${PAGE_SCRIPT_ID}" />`;
+			}
 			if (query.astro) {
 				if (query.type === 'style') {
-					if (filename.startsWith('/@fs')) {
-						filename = filename.slice('/@fs'.length);
-					} else if (filename.startsWith('/') && !ancestor(filename, config.projectRoot.pathname)) {
-						filename = new URL('.' + filename, config.projectRoot).pathname;
-					}
-
 					if (typeof query.index === 'undefined') {
 						throw new Error(`Requests for Astro CSS must include an index.`);
 					}
 
-					const transformResult = await cachedCompilation(config, normalizeFilename(filename), null, viteTransform, { ssr: Boolean(opts?.ssr) });
+					const transformResult = await cachedCompilation(config, filename, source, viteTransform, {
+						ssr: Boolean(opts?.ssr),
+					});
 
 					// Track any CSS dependencies so that HMR is triggered when they change.
-					await trackCSSDependencies.call(this, { viteDevServer, id, filename, deps: transformResult.rawCSSDeps });
+					await trackCSSDependencies.call(this, {
+						viteDevServer,
+						id,
+						filename,
+						deps: transformResult.rawCSSDeps,
+					});
 					const csses = transformResult.css;
 					const code = csses[query.index];
 
@@ -111,7 +127,9 @@ export default function astro({ config, logging }: AstroPluginOptions): vite.Plu
 						throw new Error(`Requests for hoisted scripts must include an index`);
 					}
 
-					const transformResult = await cachedCompilation(config, normalizeFilename(filename), null, viteTransform, { ssr: Boolean(opts?.ssr) });
+					const transformResult = await cachedCompilation(config, filename, source, viteTransform, {
+						ssr: Boolean(opts?.ssr),
+					});
 					const scripts = transformResult.scripts;
 					const hoistedScript = scripts[query.index];
 
@@ -119,19 +137,29 @@ export default function astro({ config, logging }: AstroPluginOptions): vite.Plu
 						throw new Error(`No hoisted script at index ${query.index}`);
 					}
 
+					if (hoistedScript.type === 'external') {
+						const src = hoistedScript.src!;
+						if (src.startsWith('/') && !isBrowserPath(src)) {
+							const publicDir = config.publicDir.pathname.replace(/\/$/, '').split('/').pop() + '/';
+							throw new Error(
+								`\n\n<script src="${src}"> references an asset in the "${publicDir}" directory. Please add the "is:inline" directive to keep this asset from being bundled.\n\nFile: ${filename}`
+							);
+						}
+					}
+
 					return {
-						code: hoistedScript.type === 'inline' ? hoistedScript.code! : `import "${hoistedScript.src!}";`,
+						code:
+							hoistedScript.type === 'inline'
+								? hoistedScript.code!
+								: `import "${hoistedScript.src!}";`,
 					};
 				}
 			}
 
-			if (!id.endsWith('.astro')) {
-				return null;
-			}
-
-			const source = await fs.promises.readFile(id, { encoding: 'utf-8' });
 			try {
-				const transformResult = await cachedCompilation(config, id, source, viteTransform, { ssr: Boolean(opts?.ssr) });
+				const transformResult = await cachedCompilation(config, filename, source, viteTransform, {
+					ssr: Boolean(opts?.ssr),
+				});
 
 				// Compile all TypeScript to JavaScript.
 				// Also, catches invalid JS/TS in the compiled output before returning.
@@ -140,12 +168,18 @@ export default function astro({ config, logging }: AstroPluginOptions): vite.Plu
 					sourcemap: 'external',
 					sourcefile: id,
 					// Pass relevant Vite options, if needed:
-					define: config.vite.define,
+					define: config.vite?.define,
 				});
 
-				// Signal to Vite that we accept HMR updates
-				const SUFFIX = isProduction ? '' : `\nif (import.meta.hot) import.meta.hot.accept((mod) => mod);`;
-
+				let SUFFIX = '';
+				// Add HMR handling in dev mode.
+				if (!resolvedConfig.isProduction) {
+					SUFFIX += `\nif (import.meta.hot) import.meta.hot.accept((mod) => mod);`;
+				}
+				// Add handling to inject scripts into each page JS bundle, if needed.
+				if (isPage) {
+					SUFFIX += `\nimport "${PAGE_SSR_SCRIPT_ID}";`;
+				}
 				return {
 					code: `${code}${SUFFIX}`,
 					map,
@@ -162,12 +196,19 @@ export default function astro({ config, logging }: AstroPluginOptions): vite.Plu
 				const scannedFrontmatter = FRONTMATTER_PARSE_REGEXP.exec(source);
 				if (scannedFrontmatter) {
 					try {
-						await esbuild.transform(scannedFrontmatter[1], { loader: 'ts', sourcemap: false, sourcefile: id });
+						await esbuild.transform(scannedFrontmatter[1], {
+							loader: 'ts',
+							sourcemap: false,
+							sourcefile: id,
+						});
 					} catch (frontmatterErr: any) {
 						// Improve the error by replacing the phrase "unexpected end of file"
 						// with "unexpected end of frontmatter" in the esbuild error message.
 						if (frontmatterErr && frontmatterErr.message) {
-							frontmatterErr.message = frontmatterErr.message.replace('end of file', 'end of frontmatter');
+							frontmatterErr.message = frontmatterErr.message.replace(
+								'end of file',
+								'end of frontmatter'
+							);
 						}
 						throw frontmatterErr;
 					}
@@ -182,7 +223,7 @@ export default function astro({ config, logging }: AstroPluginOptions): vite.Plu
     
     \`@astrojs/compiler\` encountered an unrecoverable error when compiling the following file.
     
-    **${id.replace(fileURLToPath(config.projectRoot), '')}**
+    **${id.replace(fileURLToPath(config.root), '')}**
     \`\`\`astro
     ${source}
     \`\`\`

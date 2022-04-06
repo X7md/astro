@@ -1,12 +1,9 @@
-// @ts-check
+import { defineConfig } from 'astro/config';
+import svelte from '@astrojs/svelte';
+import node from '@astrojs/node';
 
+// https://astro.build/config
 export default defineConfig({
-	renderers: ['@astrojs/renderer-svelte'],
-	vite: {
-		server: {
-			proxy: {
-				'/api': 'http://localhost:8085',
-			},
-		},
-	},
+	adapter: node(),
+	integrations: [svelte()],
 });

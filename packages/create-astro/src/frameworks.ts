@@ -1,5 +1,5 @@
 export const COUNTER_COMPONENTS = {
-	'@astrojs/renderer-preact': {
+	preact: {
 		filename: `src/components/PreactCounter.jsx`,
 		content: `import { useState } from 'preact/hooks';
 
@@ -18,7 +18,7 @@ export default function PreactCounter() {
 }
 `,
 	},
-	'@astrojs/renderer-react': {
+	react: {
 		filename: `src/components/ReactCounter.jsx`,
 		content: `import { useState } from 'react';
 
@@ -37,7 +37,7 @@ export default function ReactCounter() {
 }
 `,
 	},
-	'@astrojs/renderer-solid': {
+	solid: {
 		filename: `src/components/SolidCounter.jsx`,
 		content: `import { createSignal } from "solid-js";
 
@@ -56,7 +56,7 @@ export default function SolidCounter() {
 }
 `,
 	},
-	'@astrojs/renderer-svelte': {
+	svelte: {
 		filename: `src/components/SvelteCounter.svelte`,
 		content: `<script>
   let count = 0;
@@ -77,7 +77,7 @@ export default function SolidCounter() {
 </div>
 `,
 	},
-	'@astrojs/renderer-vue': {
+	vue: {
 		filename: `src/components/VueCounter.vue`,
 		content: `<template>
   <div id="vue" class="counter">
@@ -107,25 +107,30 @@ export default {
 	},
 };
 
-export const FRAMEWORKS = [
+export interface Integration {
+	id: string;
+	packageName: string;
+}
+
+export const FRAMEWORKS: { title: string; value: Integration }[] = [
 	{
 		title: 'Preact',
-		value: '@astrojs/renderer-preact',
+		value: { id: 'preact', packageName: '@astrojs/preact' },
 	},
 	{
 		title: 'React',
-		value: '@astrojs/renderer-react',
+		value: { id: 'react', packageName: '@astrojs/react' },
 	},
 	{
-		title: 'Solid',
-		value: '@astrojs/renderer-solid',
+		title: 'Solid.js',
+		value: { id: 'solid', packageName: '@astrojs/solid-js' },
 	},
 	{
 		title: 'Svelte',
-		value: '@astrojs/renderer-svelte',
+		value: { id: 'svelte', packageName: '@astrojs/svelte' },
 	},
 	{
 		title: 'Vue',
-		value: '@astrojs/renderer-vue',
+		value: { id: 'vue', packageName: '@astrojs/vue' },
 	},
 ];

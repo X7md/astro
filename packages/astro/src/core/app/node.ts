@@ -5,16 +5,22 @@ import { App } from './index.js';
 import { deserializeManifest } from './common.js';
 import { IncomingMessage } from 'http';
 
-function createURLFromRequest(req: IncomingMessage): URL {
-	return new URL(`http://${req.headers.host}${req.url}`);
+function createRequestFromNodeRequest(req: IncomingMessage): Request {
+	let url = `http://${req.headers.host}${req.url}`;
+	const entries = Object.entries(req.headers as Record<string, any>);
+	let request = new Request(url, {
+		method: req.method || 'GET',
+		headers: new Headers(entries),
+	});
+	return request;
 }
 
-class NodeApp extends App {
-	match(req: IncomingMessage | URL) {
-		return super.match(req instanceof URL ? req : createURLFromRequest(req));
+export class NodeApp extends App {
+	match(req: IncomingMessage | Request) {
+		return super.match(req instanceof Request ? req : createRequestFromNodeRequest(req));
 	}
-	render(req: IncomingMessage | URL) {
-		return super.render(req instanceof URL ? req : createURLFromRequest(req));
+	render(req: IncomingMessage | Request) {
+		return super.render(req instanceof Request ? req : createRequestFromNodeRequest(req));
 	}
 }
 
@@ -27,5 +33,5 @@ export async function loadManifest(rootFolder: URL): Promise<SSRManifest> {
 
 export async function loadApp(rootFolder: URL): Promise<NodeApp> {
 	const manifest = await loadManifest(rootFolder);
-	return new NodeApp(manifest, rootFolder);
+	return new NodeApp(manifest);
 }

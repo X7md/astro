@@ -1,6 +1,6 @@
 import { visit } from 'unist-util-visit';
 import Prism from 'prismjs';
-import { addAstro } from '@astrojs/prism';
+import { addAstro } from '@astrojs/prism/internal';
 import loadLanguages from 'prismjs/components/index.js';
 const noVisit = new Set(['root', 'html', 'text']);
 
@@ -56,7 +56,9 @@ function transformer(className: MaybeString) {
 			if (className) {
 				classes.push(className);
 			}
-			node.value = `<pre class="${classes.join(' ')}"><code is:raw class="${classLanguage}">${html}</code></pre>`;
+			node.value = `<pre class="${classes.join(
+				' '
+			)}"><code is:raw class="${classLanguage}">${html}</code></pre>`;
 			return node;
 		};
 		return visit(tree, 'code', visitor);

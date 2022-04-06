@@ -2,10 +2,11 @@ import { execa } from 'execa';
 import { polyfill } from '@astrojs/webapi';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import { loadConfig } from '../dist/core/config.js';
+import { resolveConfig, loadConfig } from '../dist/core/config.js';
 import dev from '../dist/core/dev/index.js';
 import build from '../dist/core/build/index.js';
 import preview from '../dist/core/preview/index.js';
+import { nodeLogDestination } from '../dist/core/logger/node.js';
 import os from 'os';
 import stripAnsi from 'strip-ansi';
 
@@ -19,6 +20,7 @@ polyfill(globalThis, {
  * @typedef {import('../src/core/dev/index').DevServer} DevServer
  * @typedef {import('../src/@types/astro').AstroConfig} AstroConfig
  * @typedef {import('../src/core/preview/index').PreviewServer} PreviewServer
+ * @typedef {import('../src/core/app/index').App} App
  *
  *
  * @typedef {Object} Fixture
@@ -29,11 +31,12 @@ polyfill(globalThis, {
  * @property {() => Promise<DevServer>} startDevServer
  * @property {() => Promise<PreviewServer>} preview
  * @property {() => Promise<void>} clean
+ * @property {() => Promise<App>} loadTestAdapterApp
  */
 
 /**
  * Load Astro fixture
- * @param {AstroConfig} inlineConfig Astro config partial (note: must specify projectRoot)
+ * @param {AstroConfig} inlineConfig Astro config partial (note: must specify `root`)
  * @returns {Promise<Fixture>} The fixture. Has the following properties:
  *   .config     - Returns the final config. Will be automatically passed to the methods below:
  *
@@ -52,10 +55,12 @@ polyfill(globalThis, {
  *   .clean()          - Async. Removes the project’s dist folder.
  */
 export async function loadFixture(inlineConfig) {
-	if (!inlineConfig || !inlineConfig.projectRoot) throw new Error("Must provide { projectRoot: './fixtures/...' }");
+	if (!inlineConfig || !inlineConfig.root)
+		throw new Error("Must provide { root: './fixtures/...' }");
 
 	// load config
-	let cwd = inlineConfig.projectRoot;
+	let cwd = inlineConfig.root;
+	delete inlineConfig.root;
 	if (typeof cwd === 'string') {
 		try {
 			cwd = new URL(cwd.replace(/\/?$/, '/'));
@@ -63,32 +68,47 @@ export async function loadFixture(inlineConfig) {
 			cwd = new URL(cwd.replace(/\/?$/, '/'), import.meta.url);
 		}
 	}
-
-	// merge configs
-	if (!inlineConfig.buildOptions) inlineConfig.buildOptions = {};
-	if (inlineConfig.buildOptions.sitemap === undefined) inlineConfig.buildOptions.sitemap = false;
-	if (!inlineConfig.devOptions) inlineConfig.devOptions = {};
+	// Load the config.
 	let config = await loadConfig({ cwd: fileURLToPath(cwd) });
-	config = merge(config, { ...inlineConfig, projectRoot: cwd });
+	config = merge(config, { ...inlineConfig, root: cwd });
+
+	// Note: the inline config doesn't run through config validation where these normalizations usually occur
+	if (typeof inlineConfig.site === 'string') {
+		config.site = new URL(inlineConfig.site);
+	}
+	if (inlineConfig.base && !inlineConfig.base.endsWith('/')) {
+		config.base = inlineConfig.base + '/';
+	}
+
+	/** @type {import('../src/core/logger/core').LogOptions} */
+	const logging = {
+		dest: nodeLogDestination,
+		level: 'error',
+	};
 
 	return {
-		build: (opts = {}) => build(config, { mode: 'development', logging: 'error', ...opts }),
+		build: (opts = {}) => build(config, { mode: 'development', logging, ...opts }),
 		startDevServer: async (opts = {}) => {
-			const devResult = await dev(config, { logging: 'error', ...opts });
-			config.devOptions.port = devResult.address.port; // update port
-			inlineConfig.devOptions.port = devResult.address.port;
+			const devResult = await dev(config, { logging, ...opts });
+			config.server.port = devResult.address.port; // update port
 			return devResult;
 		},
 		config,
-		fetch: (url, init) => fetch(`http://${config.devOptions.hostname}:${config.devOptions.port}${url.replace(/^\/?/, '/')}`, init),
+		fetch: (url, init) =>
+			fetch(`http://${'127.0.0.1'}:${config.server.port}${url.replace(/^\/?/, '/')}`, init),
 		preview: async (opts = {}) => {
-			const previewServer = await preview(config, { logging: 'error', ...opts });
-			inlineConfig.devOptions.port = previewServer.port; // update port for fetch
+			const previewServer = await preview(config, { logging, ...opts });
 			return previewServer;
 		},
-		readFile: (filePath) => fs.promises.readFile(new URL(filePath.replace(/^\//, ''), config.dist), 'utf8'),
-		readdir: (fp) => fs.promises.readdir(new URL(fp.replace(/^\//, ''), config.dist)),
-		clean: () => fs.promises.rm(config.dist, { maxRetries: 10, recursive: true, force: true }),
+		readFile: (filePath) =>
+			fs.promises.readFile(new URL(filePath.replace(/^\//, ''), config.outDir), 'utf8'),
+		readdir: (fp) => fs.promises.readdir(new URL(fp.replace(/^\//, ''), config.outDir)),
+		clean: () => fs.promises.rm(config.outDir, { maxRetries: 10, recursive: true, force: true }),
+		loadTestAdapterApp: async () => {
+			const url = new URL('./server/entry.mjs', config.outDir);
+			const { createApp } = await import(url);
+			return createApp();
+		},
 	};
 }
 
@@ -103,7 +123,11 @@ function merge(a, b) {
 	const c = {};
 	for (const k of allKeys) {
 		const needsObjectMerge =
-			typeof a[k] === 'object' && typeof b[k] === 'object' && (Object.keys(a[k]).length || Object.keys(b[k]).length) && !Array.isArray(a[k]) && !Array.isArray(b[k]);
+			typeof a[k] === 'object' &&
+			typeof b[k] === 'object' &&
+			(Object.keys(a[k]).length || Object.keys(b[k]).length) &&
+			!Array.isArray(a[k]) &&
+			!Array.isArray(b[k]);
 		if (needsObjectMerge) {
 			c[k] = merge(a[k] || {}, b[k] || {});
 			continue;

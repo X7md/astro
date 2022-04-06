@@ -1,6 +1,6 @@
 {
   "name": "@astrojs/prism",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Supports Prism highlighting in Astro projects",
   "author": "withastro",
   "license": "MIT",
@@ -11,12 +11,13 @@
     "directory": "packages/astro-prism"
   },
   "homepage": "https://astro.build",
-  "main": "index.mjs",
+  "main": "index.js",
   "scripts": {},
   "exports": {
-    ".": "./index.mjs"
+    ".": "./index.js",
+    "./internal": "./internal.mjs"
   },
-  "types": "./index.d.ts",
+  "types": "./internal.d.ts",
   "keywords": [],
   "devDependencies": {
     "prismjs": "^1.27.0"

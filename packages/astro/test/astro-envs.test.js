@@ -6,7 +6,7 @@ describe('Environment Variables', () => {
 
 	before(async () => {
 		fixture = await loadFixture({
-			projectRoot: './fixtures/astro-envs/',
+			root: './fixtures/astro-envs/',
 		});
 
 		await fixture.build();
@@ -18,6 +18,13 @@ describe('Environment Variables', () => {
 
 	it('does render public env and private env', async () => {
 		let indexHtml = await fixture.readFile('/index.html');
+
+		expect(indexHtml).to.include('CLUB_33');
+		expect(indexHtml).to.include('BLUE_BAYOU');
+	});
+
+	it('does render destructured public env and private env', async () => {
+		let indexHtml = await fixture.readFile('/destructured/index.html');
 
 		expect(indexHtml).to.include('CLUB_33');
 		expect(indexHtml).to.include('BLUE_BAYOU');

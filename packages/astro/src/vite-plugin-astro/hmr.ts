@@ -1,9 +1,9 @@
 import type { AstroConfig } from '../@types/astro';
-import type { LogOptions } from '../core/logger.js';
+import type { LogOptions } from '../core/logger/core.js';
 import type { ViteDevServer, ModuleNode, HmrContext } from 'vite';
 import type { PluginContext as RollupPluginContext, ResolvedId } from 'rollup';
 import { invalidateCompilation, isCached } from './compile.js';
-import { info } from '../core/logger.js';
+import { info } from '../core/logger/core.js';
 import * as msg from '../core/messages.js';
 
 interface TrackCSSDependenciesOptions {
@@ -13,7 +13,10 @@ interface TrackCSSDependenciesOptions {
 	deps: Set<string>;
 }
 
-export async function trackCSSDependencies(this: RollupPluginContext, opts: TrackCSSDependenciesOptions): Promise<void> {
+export async function trackCSSDependencies(
+	this: RollupPluginContext,
+	opts: TrackCSSDependenciesOptions
+): Promise<void> {
 	const { viteDevServer, filename, deps, id } = opts;
 	// Dev, register CSS dependencies for HMR.
 	if (viteDevServer) {
@@ -80,7 +83,10 @@ export async function handleHotUpdate(ctx: HmrContext, config: AstroConfig, logg
 	}
 
 	const mod = ctx.modules.find((m) => m.file === ctx.file);
-	const file = ctx.file.replace(config.projectRoot.pathname, '/');
+
+	// Note: this intentionally ONLY applies to Astro components
+	// HMR is handled for other file types by their respective plugins
+	const file = ctx.file.replace(config.root.pathname, '/');
 	if (ctx.file.endsWith('.astro')) {
 		ctx.server.ws.send({ type: 'custom', event: 'astro:update', data: { file } });
 	}

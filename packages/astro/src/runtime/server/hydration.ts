@@ -1,4 +1,4 @@
-import type { AstroComponentMetadata } from '../../@types/astro';
+import type { AstroComponentMetadata, SSRLoadedRenderer } from '../../@types/astro';
 import type { SSRElement, SSRResult } from '../../@types/astro';
 import { hydrationSpecifier, serializeListValue } from './util.js';
 import serializeJavaScript from 'serialize-javascript';
@@ -58,12 +58,21 @@ export function extractDirectives(inputProps: Record<string | number, any>): Ext
 
 					// throw an error if an invalid hydration directive was provided
 					if (HydrationDirectives.indexOf(extracted.hydration.directive) < 0) {
-						throw new Error(`Error: invalid hydration directive "${key}". Supported hydration methods: ${HydrationDirectives.map((d) => `"client:${d}"`).join(', ')}`);
+						throw new Error(
+							`Error: invalid hydration directive "${key}". Supported hydration methods: ${HydrationDirectives.map(
+								(d) => `"client:${d}"`
+							).join(', ')}`
+						);
 					}
 
 					// throw an error if the query wasn't provided for client:media
-					if (extracted.hydration.directive === 'media' && typeof extracted.hydration.value !== 'string') {
-						throw new Error('Error: Media query must be provided for "client:media", similar to client:media="(max-width: 600px)"');
+					if (
+						extracted.hydration.directive === 'media' &&
+						typeof extracted.hydration.value !== 'string'
+					) {
+						throw new Error(
+							'Error: Media query must be provided for "client:media", similar to client:media="(max-width: 600px)"'
+						);
 					}
 
 					break;
@@ -81,42 +90,48 @@ export function extractDirectives(inputProps: Record<string | number, any>): Ext
 }
 
 interface HydrateScriptOptions {
-	renderer: any;
+	renderer: SSRLoadedRenderer;
 	result: SSRResult;
 	astroId: string;
 	props: Record<string | number, any>;
 }
 
 /** For hydrated components, generate a <script type="module"> to load the component */
-export async function generateHydrateScript(scriptOptions: HydrateScriptOptions, metadata: Required<AstroComponentMetadata>): Promise<SSRElement> {
+export async function generateHydrateScript(
+	scriptOptions: HydrateScriptOptions,
+	metadata: Required<AstroComponentMetadata>
+): Promise<SSRElement> {
 	const { renderer, result, astroId, props } = scriptOptions;
 	const { hydrate, componentUrl, componentExport } = metadata;
 
 	if (!componentExport) {
-		throw new Error(`Unable to resolve a componentExport for "${metadata.displayName}"! Please open an issue.`);
+		throw new Error(
+			`Unable to resolve a componentExport for "${metadata.displayName}"! Please open an issue.`
+		);
 	}
 
-	let hydrationSource = '';
-	if (renderer.hydrationPolyfills) {
-		hydrationSource += `await Promise.all([${(await Promise.all(renderer.hydrationPolyfills.map(async (src: string) => `\n  import("${await result.resolve(src)}")`))).join(
-			', '
-		)}]);\n`;
-	}
+	let hydrationSource = ``;
 
-	hydrationSource += renderer.source
-		? `const [{ ${componentExport.value}: Component }, { default: hydrate }] = await Promise.all([import("${await result.resolve(componentUrl)}"), import("${await result.resolve(
-				renderer.source
-		  )}")]);
+	hydrationSource += renderer.clientEntrypoint
+		? `const [{ ${
+				componentExport.value
+		  }: Component }, { default: hydrate }] = await Promise.all([import("${await result.resolve(
+				componentUrl
+		  )}"), import("${await result.resolve(renderer.clientEntrypoint)}")]);
   return (el, children) => hydrate(el)(Component, ${serializeProps(props)}, children);
 `
 		: `await import("${await result.resolve(componentUrl)}");
   return () => {};
 `;
-
+	// TODO: If we can figure out tree-shaking in the final SSR build, we could safely
+	// use BEFORE_HYDRATION_SCRIPT_ID instead of 'astro:scripts/before-hydration.js'.
 	const hydrationScript = {
 		props: { type: 'module', 'data-astro-component-hydration': true },
 		children: `import setup from '${await result.resolve(hydrationSpecifier(hydrate))}';
-setup("${astroId}", {name:"${metadata.displayName}",${metadata.hydrateArgs ? `value: ${JSON.stringify(metadata.hydrateArgs)}` : ''}}, async () => {
+${`import '${await result.resolve('astro:scripts/before-hydration.js')}';`}
+setup("${astroId}", {name:"${metadata.displayName}",${
+			metadata.hydrateArgs ? `value: ${JSON.stringify(metadata.hydrateArgs)}` : ''
+		}}, async () => {
   ${hydrationSource}
 });
 `,

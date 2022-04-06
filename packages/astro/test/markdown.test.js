@@ -7,11 +7,7 @@ describe('Markdown tests', () => {
 
 	before(async () => {
 		fixture = await loadFixture({
-			projectRoot: './fixtures/markdown/',
-			buildOptions: {
-				sitemap: false,
-			},
-			renderers: ['@astrojs/renderer-preact'],
+			root: './fixtures/markdown/',
 		});
 		await fixture.build();
 	});

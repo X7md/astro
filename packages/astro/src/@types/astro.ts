@@ -1,14 +1,47 @@
+import type { AddressInfo } from 'net';
 import type * as babel from '@babel/core';
-import type { z } from 'zod';
+import type * as vite from 'vite';
+import { z } from 'zod';
+import type { ShikiConfig, Plugin } from '@astrojs/markdown-remark';
 import type { AstroConfigSchema } from '../core/config';
 import type { AstroComponentFactory, Metadata } from '../runtime/server';
-import type * as vite from 'vite';
+import type { ViteConfigWithSSR } from '../core/create-vite';
+export type { SSRManifest } from '../core/app/types';
 
 export interface AstroBuiltinProps {
 	'client:load'?: boolean;
 	'client:idle'?: boolean;
 	'client:media'?: string;
 	'client:visible'?: boolean;
+	'client:only'?: boolean | string;
+}
+
+export interface AstroBuiltinAttributes {
+	'class:list'?:
+		| Record<string, boolean>
+		| Record<any, any>
+		| Iterable<string>
+		| Iterable<any>
+		| string;
+	'set:html'?: any;
+	'set:text'?: any;
+}
+
+export interface AstroDefineVarsAttribute {
+	'define:vars'?: any;
+}
+
+export interface AstroStyleAttributes {
+	/** @deprecated Use `is:global` instead */
+	global?: boolean;
+	'is:global'?: boolean;
+	'is:inline'?: boolean;
+}
+
+export interface AstroScriptAttributes {
+	/** @deprecated Hoist is now the default behavior */
+	hoist?: boolean;
+	'is:inline'?: boolean;
 }
 
 export interface AstroComponentMetadata {
@@ -21,18 +54,21 @@ export interface AstroComponentMetadata {
 
 /** The flags supported by the Astro CLI */
 export interface CLIFlags {
-	projectRoot?: string;
+	root?: string;
 	site?: string;
-	sitemap?: boolean;
 	host?: string | boolean;
-	hostname?: string;
 	port?: number;
 	config?: string;
-	/** @deprecated */
-	experimentalStaticBuild?: boolean;
 	experimentalSsr?: boolean;
-	legacyBuild?: boolean;
+	experimentalIntegrations?: boolean;
 	drafts?: boolean;
+}
+
+export interface BuildConfig {
+	client: URL;
+	server: URL;
+	serverEntry: string;
+	staticMode: boolean | undefined;
 }
 
 /**
@@ -40,26 +76,59 @@ export interface CLIFlags {
  * Docs: https://docs.astro.build/reference/api-reference/#astro-global
  */
 export interface AstroGlobal extends AstroGlobalPartial {
+	/** get the current canonical URL */
+	canonicalURL: URL;
+	/** get page params (dynamic pages only) */
+	params: Params;
 	/** set props for this astro component (along with default values) */
 	props: Record<string, number | string | any>;
 	/** get information about this page */
-	request: {
-		/** get the current page URL */
-		url: URL;
-		/** get the current canonical URL */
-		canonicalURL: URL;
-		/** get page params (dynamic pages only) */
-		params: Params;
-	};
+	request: Request;
 	/** see if slots are used */
-	slots: Record<string, true | undefined> & { has(slotName: string): boolean; render(slotName: string): Promise<string> };
+	slots: Record<string, true | undefined> & {
+		has(slotName: string): boolean;
+		render(slotName: string, args?: any[]): Promise<string>;
+	};
 }
 
 export interface AstroGlobalPartial {
-	fetchContent<T = any>(globStr: string): Promise<FetchContentResult<T>[]>;
+	/**
+	 * @deprecated since version 0.24. See the {@link https://astro.build/deprecated/resolve upgrade guide} for more details.
+	 */
 	resolve: (path: string) => string;
+	/** @deprecated Use `Astro.glob()` instead. */
+	fetchContent(globStr: string): Promise<any[]>;
+	glob(globStr: `${any}.astro`): Promise<ComponentInstance[]>;
+	glob<T extends Record<string, any>>(globStr: `${any}.md`): Promise<MarkdownInstance<T>[]>;
+	glob<T extends Record<string, any>>(globStr: string): Promise<T[]>;
 	site: URL;
 }
+
+type ServerConfig = {
+	/**
+	 * @name server.host
+	 * @type {string | boolean}
+	 * @default `false`
+	 * @version 0.24.0
+	 * @description
+	 * Set which network IP addresses the dev server should listen on (i.e. 	non-localhost IPs).
+	 * - `false` - do not expose on a network IP address
+	 * - `true` - listen on all addresses, including LAN and public addresses
+	 * - `[custom-address]` - expose on a network IP address at `[custom-address]`
+	 */
+	host?: string | boolean;
+
+	/**
+	 * @name server.port
+	 * @type {number}
+	 * @default `3000`
+	 * @description
+	 * Set which port the dev server should listen on.
+	 *
+	 * If the given port is already in use, Astro will automatically try the next available port.
+	 */
+	port?: number;
+};
 
 /**
  * Astro User Config
@@ -74,48 +143,48 @@ export interface AstroUserConfig {
 
 	/**
 	 * @docs
-	 * @name projectRoot
-	 * @cli --project-root
+	 * @name root
+	 * @cli --root
 	 * @type {string}
 	 * @default `"."` (current working directory)
 	 * @summary Set the project root. The project root is the directory where your Astro project (and all `src`, `public` and `package.json` files) live.
 	 * @description  You should only provide this option if you run the `astro` CLI commands in a directory other than the project root directory. Usually, this option is provided via the CLI instead of the `astro.config.js` file, since Astro needs to know your project root before it can locate your config file.
 	 *
-	 * If you provide a relative path (ex: `--project-root: './my-project'`) Astro will resolve it against your current working directory.
+	 * If you provide a relative path (ex: `--root: './my-project'`) Astro will resolve it against your current working directory.
 	 *
 	 * #### Examples
 	 *
 	 * ```js
 	 * {
-	 *   projectRoot: './my-project-directory'
+	 *   root: './my-project-directory'
 	 * }
 	 * ```
 	 * ```bash
-	 * $ astro build --project-root ./my-project-directory
+	 * $ astro build --root ./my-project-directory
 	 * ```
 	 */
-	projectRoot?: string;
+	root?: string;
 
 	/**
 	 * @docs
-	 * @name dist
+	 * @name srcDir
 	 * @type {string}
-	 * @default `"./dist"`
-	 * @description Set the directory that `astro build` writes your final build to.
+	 * @default `"./src"`
+	 * @description Set the directory that Astro will read your site from.
 	 *
 	 * The value can be either an absolute file system path or a path relative to the project root.
 	 *
 	 * ```js
 	 * {
-	 *   dist: './my-custom-build-directory'
+	 *   srcDir: './www'
 	 * }
 	 * ```
 	 */
-	dist?: string;
+	srcDir?: string;
 
 	/**
 	 * @docs
-	 * @name public
+	 * @name publicDir
 	 * @type {string}
 	 * @default `"./public"`
 	 * @description
@@ -125,135 +194,95 @@ export interface AstroUserConfig {
 	 *
 	 * ```js
 	 * {
-	 *   public: './my-custom-public-directory'
+	 *   publicDir: './my-custom-publicDir-directory'
 	 * }
 	 * ```
 	 */
-	public?: string;
+	publicDir?: string;
 
 	/**
 	 * @docs
-	 * @name renderers
-	 * @type {string[]}
-	 * @default `['@astrojs/renderer-svelte','@astrojs/renderer-vue','@astrojs/renderer-react','@astrojs/renderer-preact']`
-	 * @description
-	 * Set the UI framework renderers for your project. Framework renderers are what power Astro's ability to use other frameworks inside of your project, like React, Svelte, and Vue.
+	 * @name outDir
+	 * @type {string}
+	 * @default `"./dist"`
+	 * @description Set the directory that `astro build` writes your final build to.
 	 *
-	 * Setting this configuration will disable Astro's default framework support, so you will need to provide a renderer for every framework that you want to use.
+	 * The value can be either an absolute file system path or a path relative to the project root.
 	 *
 	 * ```js
 	 * {
-	 *   // Use Astro + React, with no other frameworks.
-	 *   renderers: ['@astrojs/renderer-react']
+	 *   outDir: './my-custom-build-directory'
 	 * }
 	 * ```
 	 */
-	renderers?: string[];
+	outDir?: string;
 
 	/**
 	 * @docs
-	 * @name markdownOptions
-	 * @type {{render: MarkdownRenderOptions}}
-	 * @see [Markdown guide](/en/guides/markdown-content/)
+	 * @name site
+	 * @type {string}
 	 * @description
-	 * Configure how markdown files (`.md`) are rendered.
+	 * Your final, deployed URL. Astro uses this full URL to generate your sitemap and canonical URLs in your final build. It is strongly recommended that you set this configuration to get the most out of Astro.
 	 *
 	 * ```js
 	 * {
-	 *   markdownOptions: {
-	 *     // Add a Remark plugin to your project.
-	 *     remarkPlugins: [
-	 *       ['remark-autolink-headings', { behavior: 'prepend'}],
-	 *     ],
-	 *     // Add a Rehype plugin to your project.
-	 *     rehypePlugins: [
-	 *       'rehype-slug',
-	 *       ['rehype-autolink-headings', { behavior: 'prepend'}],
-	 *     ],
-	 *     // Customize syntax highlighting
-	 * 	   syntaxHighlight: 'shiki',
-	 *   },
+	 *   site: 'https://www.my-site.dev'
 	 * }
 	 * ```
 	 */
-	markdownOptions?: {
-		render?: MarkdownRenderOptions;
-	};
+	site?: string;
+
+	/**
+	 * @docs
+	 * @name base
+	 * @type {string}
+	 * @description
+	 * The base path you're deploying to. Astro will match this pathname during development so that your development experience matches your build environment as closely as possible. In the example below, `astro dev` will start your server at `/docs`.
+	 *
+	 * ```js
+	 * {
+	 *   base: '/docs'
+	 * }
+	 * ```
+	 */
+	base?: string;
+
+	/**
+	 * @docs
+	 * @name trailingSlash
+	 * @type {('always' | 'never' | 'ignore')}
+	 * @default `'always'`
+	 * @see buildOptions.pageUrlFormat
+	 * @description
+	 *
+	 * Set the route matching behavior of the dev server. Choose from the following options:
+	 *   - `'always'` - Only match URLs that include a trailing slash (ex: "/foo/")
+	 *   - `'never'` - Never match URLs that include a trailing slash (ex: "/foo")
+	 *   - `'ignore'` - Match URLs regardless of whether a trailing "/" exists
+	 *
+	 * Use this configuration option if your production host has strict handling of how trailing slashes work or do not work.
+	 *
+	 * You can also set this if you prefer to be more strict yourself, so that URLs with or without trailing slashes won't work during development.
+	 *
+	 * ```js
+	 * {
+	 *   // Example: Require a trailing slash during development
+	 *   trailingSlash: 'always'
+	 * }
+	 * ```
+	 */
+	trailingSlash?: 'always' | 'never' | 'ignore';
 
 	/**
 	 * @docs
 	 * @kind heading
 	 * @name Build Options
 	 */
-	buildOptions?: {
+	build?: {
 		/**
 		 * @docs
-		 * @name buildOptions.site
-		 * @type {string}
-		 * @description
-		 * Your final, deployed URL. Astro uses this full URL to generate your sitemap and canonical URLs in your final build. It is strongly recommended that you set this configuration to get the most out of Astro.
-		 *
-		 * Astro will match the site pathname during development so that your development experience matches your build environment as closely as possible. In the example below, `astro dev` will start your server at `http://localhost:3000/docs`.
-		 *
-		 * ```js
-		 * {
-		 *   buildOptions: {
-		 *     // Example: Tell Astro the final URL of your deployed website.
-		 * 	   site: 'https://www.my-site.dev/docs'
-		 *   }
-		 * }
-		 * ```
-		 */
-		site?: string;
-
-		/**
-		 * @docs
-		 * @name buildOptions.sitemap
-		 * @type {boolean}
-		 * @default `true`
-		 * @description
-		 * Generate a sitemap for your build. Set to false to disable.
-		 *
-		 * Astro will automatically generate a sitemap including all generated pages on your site. If you need more control over your sitemap, consider generating it yourself using a [Non-HTML Page](/en/core-concepts/astro-pages/#non-html-pages).
-		 *
-		 * ```js
-		 * {
-		 *   buildOptions: {
-		 *     // Example: Disable automatic sitemap generation
-		 * 	   sitemap: false
-		 *   }
-		 * }
-		 * ```
-		 */
-		sitemap?: boolean;
-
-		/**
-		 * @docs
-		 * @name buildOptions.sitemapFilter
-		 * @typeraw {(page: string) => boolean}
-		 * @see buildOptions.sitemap
-		 * @description
-		 * By default, all pages are included in your generated sitemap.
-		 * You can filter included pages by URL using `buildOptions.sitemapFilter`.
-		 *
-		 * The `page` function parameter is the full URL of your rendered page, including your `buildOptions.site` domain.
-		 * Return `true` to include a page in your sitemap, and `false` to remove it.
-		 *
-		 * ```js
-		 * {
-		 *   buildOptions: {
-		 * 	   sitemap: true
-		 * 	   sitemapFilter: (page) => page !== 'http://example.com/secret-page')
-		 *   }
-		 * }
-		 * ```
-		 */
-		sitemapFilter?: (page: string) => boolean;
-
-		/**
-		 * @docs
-		 * @name buildOptions.pageUrlFormat
-		 * @type {('file' | 'directory')}
+		 * @name build.format
+		 * @typeraw {('file' | 'directory')}
 		 * @default `'directory'`
 		 * @description
 		 * Control the output file format of each page.
@@ -262,18 +291,75 @@ export interface AstroUserConfig {
 		 *
 		 * ```js
 		 * {
-		 *   buildOptions: {
+		 *   build: {
 		 *     // Example: Generate `page.html` instead of `page/index.html` during build.
-		 * 	   pageUrlFormat: 'file'
+		 *     format: 'file'
 		 *   }
 		 * }
 		 * ```
 		 */
-		pageUrlFormat?: 'file' | 'directory';
+		format?: 'file' | 'directory';
+	};
 
+	/**
+	 * @docs
+	 * @kind heading
+	 * @name Server Options
+	 * @description
+	 *
+	 * Customize the Astro dev server, used by both `astro dev` and `astro serve`.
+	 *
+	 * ```js
+	 * {
+	 *   server: {port: 1234, host: true}
+	 * }
+	 * ```
+	 *
+	 * To set different configuration based on the command run ("dev", "preview") a function can also be passed to this configuration option.
+	 *
+	 * ```js
+	 * {
+	 *   // Example: Use the function syntax to customize based on command
+	 *   server: (command) => ({port: command === 'dev' ? 3000 : 4000})
+	 * }
+	 * ```
+	 */
+
+	/**
+	 * @docs
+	 * @name server.host
+	 * @type {string | boolean}
+	 * @default `false`
+	 * @version 0.24.0
+	 * @description
+	 * Set which network IP addresses the dev server should listen on (i.e. 	non-localhost IPs).
+	 * - `false` - do not expose on a network IP address
+	 * - `true` - listen on all addresses, including LAN and public addresses
+	 * - `[custom-address]` - expose on a network IP address at `[custom-address]`
+	 */
+
+	/**
+	 * @docs
+	 * @name server.port
+	 * @type {number}
+	 * @default `3000`
+	 * @description
+	 * Set which port the dev server should listen on.
+	 *
+	 * If the given port is already in use, Astro will automatically try the next available port.
+	 */
+
+	server?: ServerConfig | ((options: { command: 'dev' | 'preview' }) => ServerConfig);
+
+	/**
+	 * @docs
+	 * @kind heading
+	 * @name Markdown Options
+	 */
+	markdown?: {
 		/**
 		 * @docs
-		 * @name buildOptions.drafts
+		 * @name markdown.drafts
 		 * @type {boolean}
 		 * @default `false`
 		 * @description
@@ -283,110 +369,120 @@ export interface AstroUserConfig {
 		 *
 		 * ```js
 		 * {
-		 *   buildOptions: {
+		 *   markdown: {
 		 *     // Example: Include all drafts in your final build
-		 * 	   drafts: true,
+		 *     drafts: true,
 		 *   }
 		 * }
 		 * ```
 		 */
 		drafts?: boolean;
-		/**
-		 * Enables "legacy build mode" for compatibility with older Astro versions.
-		 * Default: false
-		 */
-		legacyBuild?: boolean;
-		/**
-		 * @deprecated
-		 * Experimental: Enables "static build mode" for faster builds.
-		 * Default: true
-		 */
-		experimentalStaticBuild?: boolean;
-		/**
-		 * Enable a build for SSR support.
-		 * Default: false
-		 */
-		experimentalSsr?: boolean;
-	};
-
-	/**
-	 * @docs
-	 * @kind heading
-	 * @name Dev Options
-	 */
-	devOptions?: {
-		/**
-		 * @docs
-		 * @name devOptions.host
-		 * @type {string | boolean}
-		 * @default `false`
-		 * @version 0.24.0
-		 * @description
-		 * Set which network IP addresses the dev server should listen on (i.e. 	non-localhost IPs).
-		 * - `false` - do not expose on a network IP address
-		 * - `true` - listen on all addresses, including LAN and public addresses
-		 * - `[custom-address]` - expose on a network IP address at `[custom-address]`
-		 */
-		host?: string | boolean;
 
 		/**
 		 * @docs
-		 * @name devOptions.hostname
-		 * @type {string}
-		 * @default `'localhost'`
-		 * @deprecated Use `host` instead
+		 * @name markdown.shikiConfig
+		 * @type {ShikiConfig}
 		 * @description
-		 * > **This option is deprecated.** Consider using `host` instead.
-		 *
-		 * Set which IP addresses the dev server should listen on. Set this to 0.0.0.0 to listen on all addresses, including LAN and public addresses.
+		 * Shiki configuration options. See [the markdown configuration docs](https://docs.astro.build/en/guides/markdown-content/#shiki-configuration) for usage.
 		 */
-		hostname?: string;
+		shikiConfig?: ShikiConfig;
 
 		/**
 		 * @docs
-		 * @name devOptions.port
-		 * @type {number}
-		 * @default `3000`
+		 * @name markdown.syntaxHighlight
+		 * @type {'shiki' | 'prism' | false}
+		 * @default `shiki`
 		 * @description
-		 * Set which port the dev server should listen on.
-		 *
-		 * If the given port is already in use, Astro will automatically try the next available port.
-		 */
-		port?: number;
-
-		/**
-		 * @docs
-		 * @name devOptions.trailingSlash
-		 * @type {('always' | 'never' | 'ignore')}
-		 * @default `'always'`
-		 * @see buildOptions.pageUrlFormat
-		 * @description
-		 *
-		 * Set the route matching behavior of the dev server. Choose from the following options:
-		 *   - 'always' - Only match URLs that include a trailing slash (ex: "/foo/")
-		 *   - 'never' - Never match URLs that include a trailing slash (ex: "/foo")
-		 *   - 'ignore' - Match URLs regardless of whether a trailing "/" exists
-		 *
-		 * Use this configuration option if your production host has strict handling of how trailing slashes work or do not work.
-		 *
-		 * You can also set this if you prefer to be more strict yourself, so that URLs with or without trailing slashes won't work during development.
+		 * Which syntax highlighter to use, if any.
+		 * - `shiki` - use the [Shiki](https://github.com/shikijs/shiki) highlighter
+		 * - `prism` - use the [Prism](https://prismjs.com/) highlighter
+		 * - `false` - do not apply syntax highlighting.
 		 *
 		 * ```js
 		 * {
-		 *   devOptions: {
-		 *     // Example: Require a trailing slash during development
-		 * 	   trailingSlash: 'always'
+		 *   markdown: {
+		 *     // Example: Switch to use prism for syntax highlighting in Markdown
+		 *     syntaxHighlight: 'prism',
 		 *   }
 		 * }
 		 * ```
 		 */
-		trailingSlash?: 'always' | 'never' | 'ignore';
+		syntaxHighlight?: 'shiki' | 'prism' | false;
+
+		/**
+		 * @docs
+		 * @name markdown.remarkPlugins
+		 * @type {Plugin[]}
+		 * @description
+		 * Pass a custom [Remark](https://github.com/remarkjs/remark) plugin to customize how your Markdown is built.
+		 *
+		 * **Note:** Enabling custom `remarkPlugins` or `rehypePlugins` removes Astro's built-in support for [GitHub-flavored Markdown](https://github.github.com/gfm/) support, [Footnotes](https://github.com/remarkjs/remark-footnotes) syntax, [Smartypants](https://github.com/silvenon/remark-smartypants). You must explicitly add these plugins to your `astro.config.mjs` file, if desired.
+		 *
+		 * ```js
+		 * {
+		 *   markdown: {
+		 *     // Example: The default set of remark plugins used by Astro
+		 *     remarkPlugins: ['remark-code-titles', ['rehype-autolink-headings', { behavior: 'prepend' }]],
+		 *   },
+		 * };
+		 * ```
+		 */
+		remarkPlugins?: Plugin[];
+		/**
+		 * @docs
+		 * @name markdown.rehypePlugins
+		 * @type {Plugin[]}
+		 * @description
+		 * Pass a custom [Rehype](https://github.com/remarkjs/remark-rehype) plugin to customize how your Markdown is built.
+		 *
+		 * **Note:** Enabling custom `remarkPlugins` or `rehypePlugins` removes Astro's built-in support for [GitHub-flavored Markdown](https://github.github.com/gfm/) support, [Footnotes](https://github.com/remarkjs/remark-footnotes) syntax, [Smartypants](https://github.com/silvenon/remark-smartypants). You must explicitly add these plugins to your `astro.config.mjs` file, if desired.
+		 *
+		 * ```js
+		 * {
+		 *   markdown: {
+		 *     // Example: The default set of rehype plugins used by Astro
+		 *     rehypePlugins: [['rehype-toc', { headings: ['h2', 'h3'] }], [addClasses, { 'h1,h2,h3': 'title' }], 'rehype-slug'],
+		 *   },
+		 * };
+		 * ```
+		 */
+		rehypePlugins?: Plugin[];
 	};
 
 	/**
+	 * @name adapter
+	 * @type {AstroIntegration}
+	 * @default `undefined`
+	 * @description
+	 * Add an adapter to build for SSR (server-side rendering). An adapter makes it easy to connect a deployed Astro app to a hosting provider or runtime environment.
+	 */
+	adapter?: AstroIntegration;
+
+	/**
 	 * @docs
-	 * @name devOptions.vite
-	 * @type {vite.UserConfig}
+	 * @kind heading
+	 * @name Integrations
+	 * @description
+	 *
+	 * Extend Astro with custom integrations. Integrations are your one-stop-shop for adding framework support (like Solid.js), new features (like sitemaps), and new libraries (like Partytown and Turbolinks).
+	 *
+	 * Read our [Integrations Guide](/en/guides/integrations-guide/) for help getting started with Astro Integrations.
+	 *
+	 * ```js
+	 * import react from '@astrojs/react';
+	 * import tailwind from '@astrojs/tailwind';
+	 * {
+	 *   // Example: Add React + Tailwind support to Astro
+	 *   integrations: [react(), tailwind()]
+	 * }
+	 * ```
+	 */
+	integrations?: Array<AstroIntegration | AstroIntegration[]>;
+
+	/**
+	 * @docs
+	 * @kind heading
+	 * @name Vite
 	 * @description
 	 *
 	 * Pass additional configuration options to Vite. Useful when Astro doesn't support some advanced configuration that you may need.
@@ -398,9 +494,9 @@ export interface AstroUserConfig {
 	 * ```js
 	 * {
 	 *   vite: {
-	 * 	   ssr: {
-	 *      // Example: Force a broken package to skip SSR processing, if needed
-	 * 		external: ['broken-npm-package'],
+	 *     ssr: {
+	 *       // Example: Force a broken package to skip SSR processing, if needed
+	 *       external: ['broken-npm-package'],
 	 *     }
 	 *   }
 	 * }
@@ -410,12 +506,51 @@ export interface AstroUserConfig {
 	 * {
 	 *   vite: {
 	 *     // Example: Add custom vite plugins directly to your Astro project
-	 * 	   plugins: [myPlugin()],
+	 *     plugins: [myPlugin()],
 	 *   }
 	 * }
 	 * ```
 	 */
 	vite?: vite.UserConfig & { ssr?: vite.SSROptions };
+
+	experimental?: {
+		/**
+		 * Enable experimental support for 3rd-party integrations.
+		 * Default: false
+		 */
+		integrations?: boolean;
+
+		/**
+		 * Enable a build for SSR support.
+		 * Default: false
+		 */
+		ssr?: boolean;
+	};
+
+	// Legacy options to be removed
+
+	/** @deprecated - Use "integrations" instead. Run Astro to learn more about migrating. */
+	renderers?: never;
+	/** @deprecated `projectRoot` has been renamed to `root` */
+	projectRoot?: never;
+	/** @deprecated `src` has been renamed to `srcDir` */
+	src?: never;
+	/** @deprecated `pages` has been removed. It is no longer configurable. */
+	pages?: never;
+	/** @deprecated `public` has been renamed to `publicDir` */
+	public?: never;
+	/** @deprecated `dist` has been renamed to `outDir` */
+	dist?: never;
+	/** @deprecated `styleOptions` has been renamed to `style` */
+	styleOptions?: never;
+	/** @deprecated `markdownOptions` has been renamed to `markdown` */
+	markdownOptions?: never;
+	/** @deprecated `buildOptions` has been renamed to `build` */
+	buildOptions?: never;
+	/** @deprecated `devOptions` has been renamed to `server` */
+	devOptions?: never;
+	/** @deprecated `experimentalIntegrations` has been renamed to `experimental: { integrations: true }` */
+	experimentalIntegrations?: never;
 }
 
 // NOTE(fks): We choose to keep our hand-generated AstroUserConfig interface so that
@@ -428,12 +563,41 @@ export interface AstroUserConfig {
 // }
 
 /**
+ * IDs for different stages of JS script injection:
+ * - "before-hydration": Imported client-side, before the hydration script runs. Processed & resolved by Vite.
+ * - "head-inline": Injected into a script tag in the `<head>` of every page. Not processed or resolved by Vite.
+ * - "page": Injected into the JavaScript bundle of every page. Processed & resolved by Vite.
+ * - "page-ssr": Injected into the frontmatter of every Astro page. Processed & resolved by Vite.
+ */
+export type InjectedScriptStage = 'before-hydration' | 'head-inline' | 'page' | 'page-ssr';
+
+/**
  * Resolved Astro Config
  * Config with user settings along with all defaults filled in.
  */
-export type AstroConfig = z.output<typeof AstroConfigSchema>;
+export interface AstroConfig extends z.output<typeof AstroConfigSchema> {
+	// Public:
+	// This is a more detailed type than zod validation gives us.
+	// TypeScript still confirms zod validation matches this type.
+	integrations: AstroIntegration[];
+	adapter?: AstroIntegration;
+	// Private:
+	// We have a need to pass context based on configured state,
+	// that is different from the user-exposed configuration.
+	// TODO: Create an AstroConfig class to manage this, long-term.
+	_ctx: {
+		adapter: AstroAdapter | undefined;
+		renderers: AstroRenderer[];
+		scripts: { stage: InjectedScriptStage; content: string }[];
+	};
+}
 
-export type AsyncRendererComponentFn<U> = (Component: any, props: any, children: string | undefined, metadata?: AstroComponentMetadata) => Promise<U>;
+export type AsyncRendererComponentFn<U> = (
+	Component: any,
+	props: any,
+	children: string | undefined,
+	metadata?: AstroComponentMetadata
+) => Promise<U>;
 
 /** Generic interface for a component (Astro, Svelte, React, etc.) */
 export interface ComponentInstance {
@@ -443,22 +607,17 @@ export interface ComponentInstance {
 	getStaticPaths?: (options: GetStaticPathsOptions) => GetStaticPathsResult;
 }
 
-/**
- * Astro.fetchContent() result
- * Docs: https://docs.astro.build/reference/api-reference/#astrofetchcontent
- */
-export type FetchContentResult<T> = FetchContentResultBase & T;
+export interface MarkdownInstance<T extends Record<string, any>> {
+	frontmatter: T;
+	file: string;
+	url: string | undefined;
+	Content: AstroComponentFactory;
+	getHeaders(): Promise<{ depth: number; slug: string; text: string }[]>;
+}
 
-export type FetchContentResultBase = {
-	astro: {
-		headers: string[];
-		source: string;
-		html: string;
-	};
-	url: string;
-};
-
-export type GetHydrateCallback = () => Promise<(element: Element, innerHTML: string | null) => void>;
+export type GetHydrateCallback = () => Promise<
+	(element: Element, innerHTML: string | null) => void
+>;
 
 /**
  * getStaticPaths() options
@@ -486,14 +645,20 @@ export interface JSXTransformConfig {
 	plugins?: babel.PluginItem[];
 }
 
-export type JSXTransformFn = (options: { mode: string; ssr: boolean }) => Promise<JSXTransformConfig>;
+export type JSXTransformFn = (options: {
+	mode: string;
+	ssr: boolean;
+}) => Promise<JSXTransformConfig>;
 
 export interface ManifestData {
 	routes: RouteData[];
 }
 
 export type MarkdownRenderOptions = [string | MarkdownParser, Record<string, any>];
-export type MarkdownParser = (contents: string, options?: Record<string, any>) => MarkdownParserResponse | PromiseLike<MarkdownParserResponse>;
+export type MarkdownParser = (
+	contents: string,
+	options?: Record<string, any>
+) => MarkdownParserResponse | PromiseLike<MarkdownParserResponse>;
 
 export interface MarkdownParserResponse {
 	frontmatter: {
@@ -558,46 +723,77 @@ export type Props = Record<string, unknown>;
 
 type Body = string;
 
+export interface AstroAdapter {
+	name: string;
+	serverEntrypoint?: string;
+	exports?: string[];
+	args?: any;
+}
+
 export interface EndpointOutput<Output extends Body = Body> {
 	body: Output;
 }
 
 export interface EndpointHandler {
-	[method: string]: (params: any) => EndpointOutput;
+	[method: string]: (params: any, request: Request) => EndpointOutput | Response;
 }
 
-/**
- * Astro Renderer
- * Docs: https://docs.astro.build/reference/renderer-reference/
- */
-export interface Renderer {
-	/** Name of the renderer (required) */
+export interface AstroRenderer {
+	/** Name of the renderer. */
 	name: string;
-	/** Import statement for renderer */
-	source?: string;
-	/** Import statement for the server renderer */
-	serverEntry: string;
-	/** Scripts to be injected before component */
-	polyfills?: string[];
-	/** Polyfills that need to run before hydration ever occurs */
-	hydrationPolyfills?: string[];
+	/** Import entrypoint for the client/browser renderer. */
+	clientEntrypoint?: string;
+	/** Import entrypoint for the server/build/ssr renderer. */
+	serverEntrypoint: string;
 	/** JSX identifier (e.g. 'react' or 'solid-js') */
 	jsxImportSource?: string;
 	/** Babel transform options */
 	jsxTransformOptions?: JSXTransformFn;
-	/** Utilies for server-side rendering */
+}
+
+export interface SSRLoadedRenderer extends AstroRenderer {
 	ssr: {
 		check: AsyncRendererComponentFn<boolean>;
 		renderToStaticMarkup: AsyncRendererComponentFn<{
 			html: string;
 		}>;
 	};
-	/** Return configuration object for Vite ("options" should match https://vitejs.dev/guide/api-plugin.html#config) */
-	viteConfig?: (options: { mode: 'string'; command: 'build' | 'serve' }) => Promise<vite.InlineConfig>;
-	/** @deprecated Don’t try and build these dependencies for client (deprecated in 0.21) */
-	external?: string[];
-	/** @deprecated Clientside requirements (deprecated in 0.21) */
-	knownEntrypoints?: string[];
+}
+
+export interface AstroIntegration {
+	/** The name of the integration. */
+	name: string;
+	/** The different hooks available to extend. */
+	hooks: {
+		'astro:config:setup'?: (options: {
+			config: AstroConfig;
+			command: 'dev' | 'build';
+			updateConfig: (newConfig: Record<string, any>) => void;
+			addRenderer: (renderer: AstroRenderer) => void;
+			injectScript: (stage: InjectedScriptStage, content: string) => void;
+			// TODO: Add support for `injectElement()` for full HTML element injection, not just scripts.
+			// This may require some refactoring of `scripts`, `styles`, and `links` into something
+			// more generalized. Consider the SSR use-case as well.
+			// injectElement: (stage: vite.HtmlTagDescriptor, element: string) => void;
+		}) => void;
+		'astro:config:done'?: (options: {
+			config: AstroConfig;
+			setAdapter: (adapter: AstroAdapter) => void;
+		}) => void | Promise<void>;
+		'astro:server:setup'?: (options: { server: vite.ViteDevServer }) => void | Promise<void>;
+		'astro:server:start'?: (options: { address: AddressInfo }) => void | Promise<void>;
+		'astro:server:done'?: () => void | Promise<void>;
+		'astro:build:start'?: (options: { buildConfig: BuildConfig }) => void | Promise<void>;
+		'astro:build:setup'?: (options: {
+			vite: ViteConfigWithSSR;
+			target: 'client' | 'server';
+		}) => void;
+		'astro:build:done'?: (options: {
+			pages: { pathname: string }[];
+			dir: URL;
+			routes: RouteData[];
+		}) => void | Promise<void>;
+	};
 }
 
 export type RouteType = 'page' | 'endpoint';
@@ -671,7 +867,7 @@ export interface SSRElement {
 }
 
 export interface SSRMetadata {
-	renderers: Renderer[];
+	renderers: SSRLoadedRenderer[];
 	pathname: string;
 	legacyBuild: boolean;
 }
@@ -680,7 +876,11 @@ export interface SSRResult {
 	styles: Set<SSRElement>;
 	scripts: Set<SSRElement>;
 	links: Set<SSRElement>;
-	createAstro(Astro: AstroGlobalPartial, props: Record<string, any>, slots: Record<string, any> | null): AstroGlobal;
+	createAstro(
+		Astro: AstroGlobalPartial,
+		props: Record<string, any>,
+		slots: Record<string, any> | null
+	): AstroGlobal;
 	resolve: (s: string) => Promise<string>;
 	_metadata: SSRMetadata;
 }

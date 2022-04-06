@@ -1,24 +1,46 @@
-import type { AstroGlobal, AstroGlobalPartial, MarkdownParser, MarkdownRenderOptions, Params, Renderer, SSRElement, SSRResult } from '../../@types/astro';
-
 import { bold } from 'kleur/colors';
-import { canonicalURL as getCanonicalURL } from '../util.js';
-import { isCSSRequest } from './dev/css.js';
-import { isScriptRequest } from './script.js';
+import type {
+	AstroGlobal,
+	AstroGlobalPartial,
+	MarkdownParser,
+	MarkdownRenderOptions,
+	Params,
+	SSRElement,
+	SSRLoadedRenderer,
+	SSRResult,
+} from '../../@types/astro';
 import { renderSlot } from '../../runtime/server/index.js';
-import { warn, LogOptions } from '../logger.js';
+import { LogOptions, warn } from '../logger/core.js';
+import { createCanonicalURL, isCSSRequest } from './util.js';
+import { isScriptRequest } from './script.js';
+
+function onlyAvailableInSSR(name: string) {
+	return function () {
+		// TODO add more guidance when we have docs and adapters.
+		throw new Error(`Oops, you are trying to use ${name}, which is only available with SSR.`);
+	};
+}
 
 export interface CreateResultArgs {
+	ssr: boolean;
 	legacyBuild: boolean;
 	logging: LogOptions;
 	origin: string;
 	markdownRender: MarkdownRenderOptions;
 	params: Params;
 	pathname: string;
-	renderers: Renderer[];
+	renderers: SSRLoadedRenderer[];
 	resolve: (s: string) => Promise<string>;
 	site: string | undefined;
 	links?: Set<SSRElement>;
 	scripts?: Set<SSRElement>;
+	request: Request;
+}
+
+function getFunctionExpression(slot: any) {
+	if (!slot) return;
+	if (slot.expressions?.length !== 1) return;
+	return slot.expressions[0] as (...args: any[]) => any;
 }
 
 class Slots {
@@ -32,7 +54,9 @@ class Slots {
 		if (slots) {
 			for (const key of Object.keys(slots)) {
 				if ((this as any)[key] !== undefined) {
-					throw new Error(`Unable to create a slot named "${key}". "${key}" is a reserved slot name!\nPlease update the name of this slot.`);
+					throw new Error(
+						`Unable to create a slot named "${key}". "${key}" is a reserved slot name!\nPlease update the name of this slot.`
+					);
 				}
 				Object.defineProperty(this, key, {
 					get() {
@@ -49,21 +73,37 @@ class Slots {
 		return Boolean(this.#slots[name]);
 	}
 
-	public async render(name: string) {
+	public async render(name: string, args: any[] = []) {
+		const cacheable = args.length === 0;
 		if (!this.#slots) return undefined;
-		if (this.#cache.has(name)) {
+		if (cacheable && this.#cache.has(name)) {
 			const result = this.#cache.get(name);
 			return result;
 		}
 		if (!this.has(name)) return undefined;
-		const content = await renderSlot(this.#result, this.#slots[name]).then((res) => (res != null ? res.toString() : res));
-		this.#cache.set(name, content);
+		if (!cacheable) {
+			const component = await this.#slots[name]();
+			const expression = getFunctionExpression(component);
+			if (expression) {
+				const slot = expression(...args);
+				return await renderSlot(this.#result, slot).then((res) =>
+					res != null ? String(res) : res
+				);
+			}
+		}
+		const content = await renderSlot(this.#result, this.#slots[name]).then((res) =>
+			res != null ? String(res) : res
+		);
+		if (cacheable) this.#cache.set(name, content);
 		return content;
 	}
 }
 
 export function createResult(args: CreateResultArgs): SSRResult {
-	const { legacyBuild, origin, markdownRender, params, pathname, renderers, resolve, site: buildOptionsSite } = args;
+	const { legacyBuild, markdownRender, params, pathname, renderers, request, resolve, site } = args;
+
+	const url = new URL(request.url);
+	const canonicalURL = createCanonicalURL('.' + pathname, site ?? url.origin);
 
 	// Create the result object that will be passed into the render function.
 	// This object starts here as an empty shell (not yet the result) but then
@@ -73,29 +113,37 @@ export function createResult(args: CreateResultArgs): SSRResult {
 		scripts: args.scripts ?? new Set<SSRElement>(),
 		links: args.links ?? new Set<SSRElement>(),
 		/** This function returns the `Astro` faux-global */
-		createAstro(astroGlobal: AstroGlobalPartial, props: Record<string, any>, slots: Record<string, any> | null) {
-			const site = new URL(origin);
-			const url = new URL('.' + pathname, site);
-			const canonicalURL = getCanonicalURL('.' + pathname, buildOptionsSite || origin);
+		createAstro(
+			astroGlobal: AstroGlobalPartial,
+			props: Record<string, any>,
+			slots: Record<string, any> | null
+		) {
 			const astroSlots = new Slots(result, slots);
 
-			return {
+			const Astro = {
 				__proto__: astroGlobal,
+				canonicalURL,
+				params,
 				props,
-				request: {
-					canonicalURL,
-					params,
-					url,
-				},
+				request,
+				redirect: args.ssr
+					? (path: string) => {
+							return new Response(null, {
+								status: 301,
+								headers: {
+									Location: path,
+								},
+							});
+					  }
+					: onlyAvailableInSSR('Astro.redirect'),
 				resolve(path: string) {
 					if (!legacyBuild) {
 						let extra = `This can be replaced with a dynamic import like so: await import("${path}")`;
 						if (isCSSRequest(path)) {
 							extra = `It looks like you are resolving styles. If you are adding a link tag, replace with this:
-
-<style global>
-@import "${path}";
-</style>
+---
+import "${path}";
+---
 `;
 						} else if (isScriptRequest(path)) {
 							extra = `It looks like you are resolving scripts. If you are adding a script tag, replace with this:
@@ -104,7 +152,7 @@ export function createResult(args: CreateResultArgs): SSRResult {
 
 or consider make it a module like so:
 
-<script type="module" hoist>
+<script>
 	import MyModule from "${path}";
 </script>
 `;
@@ -113,7 +161,9 @@ or consider make it a module like so:
 						warn(
 							args.logging,
 							`deprecation`,
-							`${bold('Astro.resolve()')} is deprecated. We see that you are trying to resolve ${path}.
+							`${bold(
+								'Astro.resolve()'
+							)} is deprecated. We see that you are trying to resolve ${path}.
 ${extra}`
 						);
 						// Intentionally return an empty string so that it is not relied upon.
@@ -123,8 +173,15 @@ ${extra}`
 					return astroGlobal.resolve(path);
 				},
 				slots: astroSlots,
+			} as unknown as AstroGlobal;
+
+			Object.defineProperty(Astro, '__renderMarkdown', {
+				// Ensure this API is not exposed to users
+				enumerable: false,
+				writable: false,
+				// TODO: remove 1. markdown parser logic 2. update MarkdownRenderOptions to take a function only
 				// <Markdown> also needs the same `astroConfig.markdownOptions.render` as `.md` pages
-				async privateRenderMarkdownDoNotUse(content: string, opts: any) {
+				value: async function (content: string, opts: any) {
 					let [mdRender, renderOpts] = markdownRender;
 					let parser: MarkdownParser | null = null;
 					//let renderOpts = {};
@@ -149,7 +206,9 @@ ${extra}`
 					const { code } = await parser(content, { ...renderOpts, ...(opts ?? {}) });
 					return code;
 				},
-			} as unknown as AstroGlobal;
+			});
+
+			return Astro;
 		},
 		resolve,
 		_metadata: {

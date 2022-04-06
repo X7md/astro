@@ -1,21 +1,44 @@
-import type { AstroConfig } from '../@types/astro';
-import type { LogOptions } from '../core/logger.js';
-import type { ViteDevServer, Plugin as VitePlugin } from 'vite';
-import type { OutputChunk, PreRenderedChunk } from 'rollup';
-import type { AllPagesData } from '../core/build/types';
-import type { BuildInternals } from '../core/build/internal';
-import parse5 from 'parse5';
-import srcsetParse from 'srcset-parse';
-import * as npath from 'path';
+import {
+	createElement,
+	createScript,
+	getAttribute,
+	hasAttribute,
+	insertBefore,
+	remove,
+	setAttribute,
+} from '@web/parse5-utils';
 import { promises as fs } from 'fs';
-import { getAttribute, hasAttribute, insertBefore, remove, createScript, createElement, setAttribute } from '@web/parse5-utils';
-import { addRollupInput } from './add-rollup-input.js';
-import { findAssets, findExternalScripts, findInlineScripts, findInlineStyles, getTextContent, getAttributes } from './extract-assets.js';
-import { isBuildableImage, isBuildableLink, isHoistedScript, isInSrcDirectory, hasSrcSet } from './util.js';
+import parse5 from 'parse5';
+import * as npath from 'path';
+import type { OutputChunk, PluginContext, PreRenderedChunk } from 'rollup';
+import srcsetParse from 'srcset-parse';
+import type { Plugin as VitePlugin, ViteDevServer } from 'vite';
+import type { AstroConfig } from '../@types/astro';
+import type { BuildInternals } from '../core/build/internal';
+import type { AllPagesData } from '../core/build/types';
+import type { LogOptions } from '../core/logger/core.js';
+import { prependDotSlash } from '../core/path.js';
 import { render as ssrRender } from '../core/render/dev/index.js';
-import { getAstroStyleId, getAstroPageStyleId } from '../vite-plugin-build-css/index.js';
-import { prependDotSlash, removeEndingForwardSlash } from '../core/path.js';
 import { RouteCache } from '../core/render/route-cache.js';
+import { getOutputFilename } from '../core/util.js';
+import { getAstroPageStyleId, getAstroStyleId } from '../vite-plugin-build-css/index.js';
+import { addRollupInput } from './add-rollup-input.js';
+import {
+	findAssets,
+	findExternalScripts,
+	findInlineScripts,
+	findInlineStyles,
+	getAttributes,
+	getTextContent,
+} from './extract-assets.js';
+import {
+	hasSrcSet,
+	isBuildableImage,
+	isBuildableLink,
+	isHoistedScript,
+	isInSrcDirectory,
+} from './util.js';
+import { createRequest } from '../core/request.js';
 
 // This package isn't real ESM, so have to coerce it
 const matchSrcset: typeof srcsetParse = (srcsetParse as any).default;
@@ -25,7 +48,6 @@ const ASTRO_PAGE_PREFIX = '@astro-page';
 const ASTRO_SCRIPT_PREFIX = '@astro-script';
 
 const ASTRO_EMPTY = '@astro-empty';
-const STATUS_CODE_REGEXP = /^[0-9]{3}$/;
 
 interface PluginOptions {
 	astroConfig: AstroConfig;
@@ -43,13 +65,14 @@ function relativePath(from: string, to: string): string {
 	return prependDotSlash(rel);
 }
 
-export function rollupPluginAstroBuildHTML(options: PluginOptions): VitePlugin {
-	const { astroConfig, internals, logging, origin, allPages, routeCache, viteServer, pageNames } = options;
+export function rollupPluginAstroScanHTML(options: PluginOptions): VitePlugin {
+	const { astroConfig, internals, logging, origin, allPages, routeCache, viteServer, pageNames } =
+		options;
 
 	// The filepath root of the src folder
-	const srcRoot = astroConfig.src.pathname;
+	const srcRoot = astroConfig.srcDir.pathname;
 	// The web path of the src folter
-	const srcRootWeb = srcRoot.substr(astroConfig.projectRoot.pathname.length - 1);
+	const srcRootWeb = srcRoot.substr(astroConfig.root.pathname.length - 1);
 
 	// A map of pages to rendered HTML
 	const renderedPageMap = new Map<string, string>();
@@ -83,10 +106,15 @@ export function rollupPluginAstroBuildHTML(options: PluginOptions): VitePlugin {
 				for (const pathname of pageData.paths) {
 					pageNames.push(pathname.replace(/\/?$/, '/').replace(/^\//, ''));
 					const id = ASTRO_PAGE_PREFIX + pathname;
-					const html = await ssrRender(renderers, mod, {
+					const response = await ssrRender(renderers, mod, {
 						astroConfig,
-						filePath: new URL(`./${component}`, astroConfig.projectRoot),
+						filePath: new URL(`./${component}`, astroConfig.root),
 						logging,
+						request: createRequest({
+							url: new URL(origin + pathname),
+							headers: new Headers(),
+							logging,
+						}),
 						mode: 'production',
 						origin,
 						pathname,
@@ -94,6 +122,12 @@ export function rollupPluginAstroBuildHTML(options: PluginOptions): VitePlugin {
 						routeCache,
 						viteServer,
 					});
+
+					if (response.type !== 'html') {
+						continue;
+					}
+
+					const html = response.html;
 					renderedPageMap.set(id, html);
 
 					const document = parse5.parse(html, {
@@ -150,7 +184,7 @@ export function rollupPluginAstroBuildHTML(options: PluginOptions): VitePlugin {
 							if (src?.startsWith(srcRoot) && !astroAssetMap.has(src)) {
 								astroAssetMap.set(src, fs.readFile(new URL(`file://${src}`)));
 							} else if (src?.startsWith(srcRootWeb) && !astroAssetMap.has(src)) {
-								const resolved = new URL('.' + src, astroConfig.projectRoot);
+								const resolved = new URL('.' + src, astroConfig.root);
 								astroAssetMap.set(src, fs.readFile(resolved));
 							}
 						}
@@ -161,7 +195,7 @@ export function rollupPluginAstroBuildHTML(options: PluginOptions): VitePlugin {
 								if (url.startsWith(srcRoot) && !astroAssetMap.has(url)) {
 									astroAssetMap.set(url, fs.readFile(new URL(`file://${url}`)));
 								} else if (url.startsWith(srcRootWeb) && !astroAssetMap.has(url)) {
-									const resolved = new URL('.' + url, astroConfig.projectRoot);
+									const resolved = new URL('.' + url, astroConfig.root);
 									astroAssetMap.set(url, fs.readFile(resolved));
 								}
 							}
@@ -243,7 +277,7 @@ export function rollupPluginAstroBuildHTML(options: PluginOptions): VitePlugin {
 			return outputOptions;
 		},
 
-		async generateBundle(_options, bundle) {
+		async generateBundle(this: PluginContext, _options, bundle) {
 			const facadeIdMap = new Map<string, string>();
 			for (const [chunkId, output] of Object.entries(bundle)) {
 				if (output.type === 'chunk') {
@@ -310,7 +344,12 @@ export function rollupPluginAstroBuildHTML(options: PluginOptions): VitePlugin {
 
 			// Keep track of links added so we don't do so twice.
 			const linkChunksAdded = new Set<string>();
-			const appendStyleChunksBefore = (ref: parse5.Element, pathname: string, referenceIds: string[] | undefined, attrs: Record<string, any> = {}) => {
+			const appendStyleChunksBefore = (
+				ref: parse5.Element,
+				pathname: string,
+				referenceIds: string[] | undefined,
+				attrs: Record<string, any> = {}
+			) => {
 				let added = false;
 				if (referenceIds) {
 					const lastNode = ref;
@@ -391,7 +430,7 @@ export function rollupPluginAstroBuildHTML(options: PluginOptions): VitePlugin {
 						let src = getAttribute(script, 'src');
 						// If this is projectRoot relative, get the fullpath to match the facadeId.
 						if (src?.startsWith(srcRootWeb)) {
-							src = new URL('.' + src, astroConfig.projectRoot).pathname;
+							src = new URL('.' + src, astroConfig.root).pathname;
 						}
 						// On windows the facadeId doesn't start with / but does not Unix :/
 						if (src && (facadeIdMap.has(src) || facadeIdMap.has(src.substr(1)))) {
@@ -421,7 +460,12 @@ export function rollupPluginAstroBuildHTML(options: PluginOptions): VitePlugin {
 								if (!pageCSSAdded) {
 									const attrs = getAttributes(node);
 									delete attrs['data-astro-injected'];
-									pageCSSAdded = appendStyleChunksBefore(node, pathname, cssChunkMap.get(styleId), attrs);
+									pageCSSAdded = appendStyleChunksBefore(
+										node,
+										pathname,
+										cssChunkMap.get(styleId),
+										attrs
+									);
 								}
 								remove(node);
 								break;
@@ -479,14 +523,7 @@ export function rollupPluginAstroBuildHTML(options: PluginOptions): VitePlugin {
 
 				const outHTML = parse5.serialize(document);
 				const name = pathname.substr(1);
-				let outPath: string;
-
-				// Output directly to 404.html rather than 404/index.html
-				if (astroConfig.buildOptions.pageUrlFormat === 'file' || STATUS_CODE_REGEXP.test(name)) {
-					outPath = `${removeEndingForwardSlash(name || 'index')}.html`;
-				} else {
-					outPath = npath.posix.join(name, 'index.html');
-				}
+				const outPath = getOutputFilename(astroConfig, name);
 
 				this.emitFile({
 					fileName: outPath,

@@ -5,7 +5,8 @@ import fetch from 'node-fetch';
 import prompts from 'prompts';
 import degit from 'degit';
 import yargs from 'yargs-parser';
-import { FRAMEWORKS, COUNTER_COMPONENTS } from './frameworks.js';
+import ora from 'ora';
+import { FRAMEWORKS, COUNTER_COMPONENTS, Integration } from './frameworks.js';
 import { TEMPLATES } from './templates.js';
 import { createConfig } from './config.js';
 import { logger, defaultLogLevel } from './logger.js';
@@ -15,7 +16,7 @@ import { logger, defaultLogLevel } from './logger.js';
 // broke our arg parser, since `--` is a special kind of flag. Filtering for `--` here
 // fixes the issue so that create-astro now works on all npm version.
 const cleanArgv = process.argv.filter((arg) => arg !== '--');
-const args = yargs(cleanArgv, { array: ['renderers'] });
+const args = yargs(cleanArgv);
 prompts.override(args);
 
 export function mkdirp(dir: string) {
@@ -27,17 +28,24 @@ export function mkdirp(dir: string) {
 	}
 }
 
-const { version } = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf-8'));
+const { version } = JSON.parse(
+	fs.readFileSync(new URL('../package.json', import.meta.url), 'utf-8')
+);
 
 const POSTPROCESS_FILES = ['package.json', 'astro.config.mjs', 'CHANGELOG.md']; // some files need processing after copying.
 
 export async function main() {
 	logger.debug('Verbose logging turned on');
 	console.log(`\n${bold('Welcome to Astro!')} ${gray(`(create-astro v${version})`)}`);
-	console.log(`If you encounter a problem, visit ${cyan('https://github.com/withastro/astro/issues')} to search or file a new issue.\n`);
+	console.log(
+		`If you encounter a problem, visit ${cyan(
+			'https://github.com/withastro/astro/issues'
+		)} to search or file a new issue.\n`
+	);
 
-	console.log(`${green(`>`)} ${gray(`Prepare for liftoff.`)}`);
-	console.log(`${green(`>`)} ${gray(`Gathering mission details...`)}`);
+	let spinner = ora({ color: 'green', text: 'Prepare for liftoff.' });
+
+	spinner.succeed();
 
 	const cwd = (args['_'][2] as string) || '.';
 	if (fs.existsSync(cwd)) {
@@ -57,7 +65,7 @@ export async function main() {
 		mkdirp(cwd);
 	}
 
-	const options = /** @type {import('./types/internal').Options} */ await prompts([
+	const options = await prompts([
 		{
 			type: 'select',
 			name: 'template',
@@ -72,7 +80,9 @@ export async function main() {
 
 	const hash = args.commit ? `#${args.commit}` : '';
 
-	const templateTarget = options.template.includes('/') ? options.template : `withastro/astro/examples/${options.template}#latest`;
+	const templateTarget = options.template.includes('/')
+		? options.template
+		: `withastro/astro/examples/${options.template}#latest`;
 
 	const emitter = degit(`${templateTarget}${hash}`, {
 		cache: false,
@@ -87,30 +97,27 @@ export async function main() {
 	});
 
 	const selectedTemplate = TEMPLATES.find((template) => template.value === options.template);
-	let renderers: string[] = [];
+	let integrations: Integration[] = [];
 
-	if (selectedTemplate?.renderers === true) {
-		const result = /** @type {import('./types/internal').Options} */ await prompts([
+	if (selectedTemplate?.integrations === true) {
+		const result = await prompts([
 			{
 				type: 'multiselect',
-				name: 'renderers',
+				name: 'integrations',
 				message: 'Which frameworks would you like to use?',
 				choices: FRAMEWORKS,
 			},
 		]);
-		renderers = result.renderers;
-	} else if (selectedTemplate?.renderers && Array.isArray(selectedTemplate.renderers) && selectedTemplate.renderers.length) {
-		renderers = selectedTemplate.renderers;
-		const titles = renderers.map((renderer) => FRAMEWORKS.find((item) => item.value === renderer)?.title).join(', ');
-		console.log(`${green(`✔`)} ${bold(`Using template's default renderers`)} ${gray('›')} ${titles}`);
+		integrations = result.integrations;
 	}
+
+	spinner = ora({ color: 'green', text: 'Copying project files...' }).start();
 
 	// Copy
 	try {
 		emitter.on('info', (info) => {
 			logger.debug(info.message);
 		});
-		console.log(`${green(`>`)} ${gray(`Copying project files...`)}`);
 		await emitter.clone(cwd);
 	} catch (err: any) {
 		// degit is compiled, so the stacktrace is pretty noisy. Only report the stacktrace when using verbose mode.
@@ -119,19 +126,32 @@ export async function main() {
 
 		// Warning for issue #655
 		if (err.message === 'zlib: unexpected end of file') {
-			console.log(yellow("This seems to be a cache related problem. Remove the folder '~/.degit/github/withastro' to fix this error."));
-			console.log(yellow('For more information check out this issue: https://github.com/withastro/astro/issues/655'));
+			console.log(
+				yellow(
+					"This seems to be a cache related problem. Remove the folder '~/.degit/github/withastro' to fix this error."
+				)
+			);
+			console.log(
+				yellow(
+					'For more information check out this issue: https://github.com/withastro/astro/issues/655'
+				)
+			);
 		}
 
 		// Helpful message when encountering the "could not find commit hash for ..." error
 		if (err.code === 'MISSING_REF') {
-			console.log(yellow("This seems to be an issue with degit. Please check if you have 'git' installed on your system, and install it if you don't have (https://git-scm.com)."));
+			console.log(
+				yellow(
+					"This seems to be an issue with degit. Please check if you have 'git' installed on your system, and install it if you don't have (https://git-scm.com)."
+				)
+			);
 			console.log(
 				yellow(
 					"If you do have 'git' installed, please run this command with the --verbose flag and file a new issue with the command output here: https://github.com/withastro/astro/issues"
 				)
 			);
 		}
+		spinner.fail();
 		process.exit(1);
 	}
 
@@ -148,24 +168,43 @@ export async function main() {
 					break;
 				}
 				case 'astro.config.mjs': {
-					if (selectedTemplate?.renderers !== true) {
+					if (selectedTemplate?.integrations !== true) {
 						break;
 					}
-					await fs.promises.writeFile(fileLoc, createConfig({ renderers }));
+					await fs.promises.writeFile(fileLoc, createConfig({ integrations }));
 					break;
 				}
 				case 'package.json': {
 					const packageJSON = JSON.parse(await fs.promises.readFile(fileLoc, 'utf8'));
 					delete packageJSON.snowpack; // delete snowpack config only needed in monorepo (can mess up projects)
-					// Fetch latest versions of selected renderers
-					const rendererEntries = (await Promise.all(
-						['astro', ...renderers].map((renderer: string) =>
-							fetch(`https://registry.npmjs.org/${renderer}/latest`)
-								.then((res: any) => res.json())
-								.then((res: any) => [renderer, `^${res['version']}`])
+					// Fetch latest versions of selected integrations
+					const integrationEntries = (
+						await Promise.all(
+							integrations.map((integration) =>
+								fetch(`https://registry.npmjs.org/${integration.packageName}/latest`)
+									.then((res) => res.json())
+									.then((res: any) => {
+										let dependencies: [string, string][] = [[res['name'], `^${res['version']}`]];
+
+										if (res['peerDependencies']) {
+											for (const peer in res['peerDependencies']) {
+												dependencies.push([peer, res['peerDependencies'][peer]]);
+											}
+										}
+
+										return dependencies;
+									})
+							)
 						)
-					)) as any;
-					packageJSON.devDependencies = { ...(packageJSON.devDependencies ?? {}), ...Object.fromEntries(rendererEntries) };
+					).flat(1);
+					// merge and sort dependencies
+					packageJSON.devDependencies = {
+						...(packageJSON.devDependencies ?? {}),
+						...Object.fromEntries(integrationEntries),
+					};
+					packageJSON.devDependencies = Object.fromEntries(
+						Object.entries(packageJSON.devDependencies).sort((a, b) => a[0].localeCompare(b[0]))
+					);
 					await fs.promises.writeFile(fileLoc, JSON.stringify(packageJSON, undefined, 2));
 					break;
 				}
@@ -178,11 +217,13 @@ export async function main() {
 		let importStatements: string[] = [];
 		let components: string[] = [];
 		await Promise.all(
-			renderers.map(async (renderer) => {
-				const component = COUNTER_COMPONENTS[renderer as keyof typeof COUNTER_COMPONENTS];
+			integrations.map(async (integration) => {
+				const component = COUNTER_COMPONENTS[integration.id as keyof typeof COUNTER_COMPONENTS];
 				const componentName = path.basename(component.filename, path.extname(component.filename));
 				const absFileLoc = path.resolve(cwd, component.filename);
-				importStatements.push(`import ${componentName} from '${component.filename.replace(/^src/, '..')}';`);
+				importStatements.push(
+					`import ${componentName} from '${component.filename.replace(/^src/, '..')}';`
+				);
 				components.push(`<${componentName} client:visible />`);
 				await fs.promises.writeFile(absFileLoc, component.content);
 			})
@@ -200,18 +241,22 @@ export async function main() {
 		await fs.promises.writeFile(pageFileLoc, newContent);
 	}
 
+	spinner.succeed();
 	console.log(bold(green('✔') + ' Done!'));
 
 	console.log('\nNext steps:');
 	let i = 1;
-
 	const relative = path.relative(process.cwd(), cwd);
 	if (relative !== '') {
 		console.log(`  ${i++}: ${bold(cyan(`cd ${relative}`))}`);
 	}
 
 	console.log(`  ${i++}: ${bold(cyan('npm install'))} (or pnpm install, yarn, etc)`);
-	console.log(`  ${i++}: ${bold(cyan('git init && git add -A && git commit -m "Initial commit"'))} (optional step)`);
+	console.log(
+		`  ${i++}: ${bold(
+			cyan('git init && git add -A && git commit -m "Initial commit"')
+		)} (optional step)`
+	);
 	console.log(`  ${i++}: ${bold(cyan('npm run dev'))} (or pnpm, yarn, etc)`);
 
 	console.log(`\nTo close the dev server, hit ${bold(cyan('Ctrl-C'))}`);

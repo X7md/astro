@@ -1,4 +1,12 @@
-import type { RouteData, SerializedRouteData, MarkdownRenderOptions } from '../../@types/astro';
+import type {
+	RouteData,
+	SerializedRouteData,
+	MarkdownRenderOptions,
+	ComponentInstance,
+	SSRLoadedRenderer,
+} from '../../@types/astro';
+
+export type ComponentPath = string;
 
 export interface RouteInfo {
 	routeData: RouteData;
@@ -17,10 +25,16 @@ export interface SSRManifest {
 	markdown: {
 		render: MarkdownRenderOptions;
 	};
-	renderers: string[];
+	pageMap: Map<ComponentPath, ComponentInstance>;
+	renderers: SSRLoadedRenderer[];
 	entryModules: Record<string, string>;
 }
 
 export type SerializedSSRManifest = Omit<SSRManifest, 'routes'> & {
 	routes: SerializedRouteInfo[];
 };
+
+export type AdapterCreateExports<T = any> = (
+	manifest: SSRManifest,
+	args?: T
+) => Record<string, any>;

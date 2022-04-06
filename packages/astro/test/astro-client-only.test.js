@@ -7,7 +7,7 @@ describe('Client only components', () => {
 
 	before(async () => {
 		fixture = await loadFixture({
-			projectRoot: './fixtures/astro-client-only/',
+			root: './fixtures/astro-client-only/',
 		});
 		await fixture.build();
 	});
@@ -22,6 +22,6 @@ describe('Client only components', () => {
 		const script = $script.html();
 
 		// test 2: svelte renderer is on the page
-		expect(/import\(".\/PersistentCounter.*/g.test(script)).to.be.ok;
+		expect(/import\(".\/entry.*/g.test(script)).to.be.ok;
 	});
 });

@@ -8,7 +8,11 @@ import * as path from 'path';
 import { pathToFileURL } from 'url';
 import * as fs from 'fs';
 
-async function openAllDocuments(workspaceUri: URL, filePathsToIgnore: string[], checker: AstroCheck) {
+async function openAllDocuments(
+	workspaceUri: URL,
+	filePathsToIgnore: string[],
+	checker: AstroCheck
+) {
 	const files = await glob('**/*.astro', {
 		cwd: workspaceUri.pathname,
 		ignore: ['node_modules/**'].concat(filePathsToIgnore.map((ignore) => `${ignore}/**`)),
@@ -57,14 +61,14 @@ function offsetAt({ line, character }: { line: number; character: number }, text
 	return i;
 }
 
-function pad(str: string, len: number) {
+function generateString(str: string, len: number) {
 	return Array.from({ length: len }, () => str).join('');
 }
 
 export async function run() {}
 
 export async function check(astroConfig: AstroConfig) {
-	const root = astroConfig.projectRoot;
+	const root = astroConfig.root;
 	let checker = new AstroCheck(root.toString());
 	await openAllDocuments(root, [], checker);
 
@@ -79,15 +83,19 @@ export async function check(astroConfig: AstroConfig) {
 		diag.diagnostics.forEach((d) => {
 			switch (d.severity) {
 				case DiagnosticSeverity.Error: {
-					console.error(`${bold(cyan(path.relative(root.pathname, diag.filePath)))}:${bold(yellow(d.range.start.line))}:${bold(yellow(d.range.start.character))} - ${d.message}`);
+					console.error(
+						`${bold(cyan(path.relative(root.pathname, diag.filePath)))}:${bold(
+							yellow(d.range.start.line)
+						)}:${bold(yellow(d.range.start.character))} - ${d.message}`
+					);
 					let startOffset = offsetAt({ line: d.range.start.line, character: 0 }, diag.text);
 					let endOffset = offsetAt({ line: d.range.start.line + 1, character: 0 }, diag.text);
 					let str = diag.text.substring(startOffset, endOffset - 1);
 					const lineNumStr = d.range.start.line.toString();
 					const lineNumLen = lineNumStr.length;
 					console.error(`${bgWhite(black(lineNumStr))}  ${str}`);
-					let tildes = pad('~', d.range.end.character - d.range.start.character);
-					let spaces = pad(' ', d.range.start.character + lineNumLen - 1);
+					let tildes = generateString('~', d.range.end.character - d.range.start.character);
+					let spaces = generateString(' ', d.range.start.character + lineNumLen - 1);
 					console.error(`   ${spaces}${bold(red(tildes))}\n`);
 					result.errors++;
 					break;

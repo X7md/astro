@@ -1,30 +1,18 @@
 import { createServer } from 'http';
 import fs from 'fs';
 import mime from 'mime';
-import { loadApp } from 'astro/app/node';
-import { polyfill } from '@astrojs/webapi';
-import { apiHandler } from './api.mjs';
-
-polyfill(globalThis);
+import { handler as ssrHandler } from '../dist/server/entry.mjs';
 
 const clientRoot = new URL('../dist/client/', import.meta.url);
-const serverRoot = new URL('../dist/server/', import.meta.url);
-const app = await loadApp(serverRoot);
 
 async function handle(req, res) {
-	const route = app.match(req);
+	ssrHandler(req, res, async (err) => {
+		if (err) {
+			res.writeHead(500);
+			res.end(err.stack);
+			return;
+		}
 
-	if (route) {
-		const html = await app.render(req, route);
-
-		res.writeHead(200, {
-			'Content-Type': 'text/html; charset=utf-8',
-			'Content-Length': Buffer.byteLength(html, 'utf-8'),
-		});
-		res.end(html);
-	} else if (/^\/api\//.test(req.url)) {
-		return apiHandler(req, res);
-	} else {
 		let local = new URL('.' + req.url, clientRoot);
 		try {
 			const data = await fs.promises.readFile(local);
@@ -36,7 +24,7 @@ async function handle(req, res) {
 			res.writeHead(404);
 			res.end();
 		}
-	}
+	});
 }
 
 const server = createServer((req, res) => {

@@ -99,7 +99,8 @@ jobs:
         with:
           name: artifacts
           path: |
-            packages/**/dist/**
+            packages/*/dist/**
+            packages/*/*/dist/**
             packages/webapi/mod.js
             packages/webapi/mod.js.map
           if-no-files-found: error
@@ -132,6 +133,11 @@ jobs:
         with:
           node-version: ${{ matrix.node_version }}
           cache: 'pnpm'
+
+      - name: Use Deno
+        uses: denoland/setup-deno@v1
+        with:
+          deno-version: v1.19.3
 
       - name: Download Build Artifacts
         uses: actions/download-artifact@v3
@@ -223,6 +229,8 @@ jobs:
         id: changesets
         uses: changesets/action@v1
         with:
+          # Note: pnpm install after versioning is necessary to refresh lockfile
+          version: pnpm run version
           publish: pnpm exec changeset publish
           commit: '[ci] release'
           title: '[ci] release'

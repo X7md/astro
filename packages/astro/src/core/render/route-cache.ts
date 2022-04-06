@@ -1,8 +1,19 @@
-import type { ComponentInstance, GetStaticPathsItem, GetStaticPathsResult, GetStaticPathsResultKeyed, Params, RouteData, RSS } from '../../@types/astro';
-import { LogOptions, warn, debug } from '../logger.js';
+import type {
+	ComponentInstance,
+	GetStaticPathsItem,
+	GetStaticPathsResult,
+	GetStaticPathsResultKeyed,
+	Params,
+	RouteData,
+	RSS,
+} from '../../@types/astro';
+import { LogOptions, warn, debug } from '../logger/core.js';
 
 import { generatePaginateFunction } from './paginate.js';
-import { validateGetStaticPathsModule, validateGetStaticPathsResult } from '../routing/index.js';
+import {
+	validateGetStaticPathsModule,
+	validateGetStaticPathsResult,
+} from '../routing/validation.js';
 
 type RSSFn = (...args: any[]) => any;
 
@@ -11,19 +22,37 @@ function stringifyParams(params: Params) {
 	return JSON.stringify(params, Object.keys(params).sort());
 }
 
-export async function callGetStaticPaths(mod: ComponentInstance, route: RouteData, isValidate: boolean, logging: LogOptions): Promise<RouteCacheEntry> {
-	validateGetStaticPathsModule(mod);
+interface CallGetStaticPathsOptions {
+	mod: ComponentInstance;
+	route: RouteData;
+	isValidate: boolean;
+	logging: LogOptions;
+	ssr: boolean;
+}
+
+export async function callGetStaticPaths({
+	isValidate,
+	logging,
+	mod,
+	route,
+	ssr,
+}: CallGetStaticPathsOptions): Promise<RouteCacheEntry> {
+	validateGetStaticPathsModule(mod, { ssr });
 	const resultInProgress = {
 		rss: [] as RSS[],
 	};
-	const staticPaths: GetStaticPathsResult = await (
-		await mod.getStaticPaths!({
-			paginate: generatePaginateFunction(route),
-			rss: (data) => {
-				resultInProgress.rss.push(data);
-			},
-		})
-	).flat();
+
+	let staticPaths: GetStaticPathsResult = [];
+	if (mod.getStaticPaths) {
+		staticPaths = (
+			await mod.getStaticPaths({
+				paginate: generatePaginateFunction(route),
+				rss: (data) => {
+					resultInProgress.rss.push(data);
+				},
+			})
+		).flat();
+	}
 
 	const keyedStaticPaths = staticPaths as GetStaticPathsResultKeyed;
 	keyedStaticPaths.keyed = new Map<string, GetStaticPathsItem>();
@@ -68,7 +97,11 @@ export class RouteCache {
 		// Warn here so that an unexpected double-call of getStaticPaths()
 		// isn't invisible and developer can track down the issue.
 		if (this.cache[route.component]) {
-			warn(this.logging, 'routeCache', `Internal Warning: route cache overwritten. (${route.component})`);
+			warn(
+				this.logging,
+				'routeCache',
+				`Internal Warning: route cache overwritten. (${route.component})`
+			);
 		}
 		this.cache[route.component] = entry;
 	}
@@ -86,5 +119,7 @@ export function findPathItemByKey(staticPaths: GetStaticPathsResultKeyed, params
 	}
 
 	debug('findPathItemByKey', `Unexpected cache miss looking for ${paramsKey}`);
-	matchedStaticPath = staticPaths.find(({ params: _params }) => JSON.stringify(_params) === paramsKey);
+	matchedStaticPath = staticPaths.find(
+		({ params: _params }) => JSON.stringify(_params) === paramsKey
+	);
 }

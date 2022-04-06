@@ -1,6 +1,6 @@
 {
   "name": "@astrojs/markdown-remark",
-  "version": "0.6.4",
+  "version": "0.8.1",
   "type": "module",
   "author": "withastro",
   "license": "MIT",
@@ -18,11 +18,12 @@
   "scripts": {
     "prepublish": "pnpm build",
     "build": "astro-scripts build \"src/**/*.ts\" && tsc -p tsconfig.json",
+    "build:ci": "astro-scripts build \"src/**/*.ts\"",
     "postbuild": "astro-scripts copy \"src/**/*.js\"",
     "dev": "astro-scripts dev \"src/**/*.ts\""
   },
   "dependencies": {
-    "@astrojs/prism": "^0.4.0",
+    "@astrojs/prism": "^0.4.1",
     "assert": "^2.0.0",
     "github-slugger": "^1.4.0",
     "gray-matter": "^4.0.3",
@@ -41,7 +42,7 @@
     "remark-smartypants": "^2.0.0",
     "shiki": "^0.10.1",
     "unified": "^10.1.2",
-    "unist-util-map": "^3.0.0",
+    "unist-util-map": "^3.0.1",
     "unist-util-visit": "^4.1.0"
   },
   "devDependencies": {

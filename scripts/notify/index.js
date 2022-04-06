@@ -1,7 +1,20 @@
+import { globby as glob } from 'globby';
+import { fileURLToPath } from 'node:url';
+import { readFile } from 'node:fs/promises';
+
 const baseUrl = new URL('https://github.com/withastro/astro/blob/main/');
 
 const emojis = ['🎉', '🥳', '🚀', '🧑‍🚀', '🎊', '🏆', '✅', '🤩', '🤖', '🙌'];
-const descriptors = ['new releases', 'hot and fresh updates', 'shiny updates', 'exciting changes', 'package updates', 'awesome updates', 'bug fixes and features', 'updates'];
+const descriptors = [
+	'new releases',
+	'hot and fresh updates',
+	'shiny updates',
+	'exciting changes',
+	'package updates',
+	'awesome updates',
+	'bug fixes and features',
+	'updates',
+];
 const verbs = [
 	'just went out!',
 	'just launched!',
@@ -43,30 +56,32 @@ const plurals = new Map([
 ]);
 
 function pluralize(text) {
-	return text.replace(/(\[([^\]]+)\])/gm, (_, _full, match) => (plurals.has(match) ? plurals.get(match) : `${match}s`));
+	return text.replace(/(\[([^\]]+)\])/gm, (_, _full, match) =>
+		plurals.has(match) ? plurals.get(match) : `${match}s`
+	);
 }
 
 function singularlize(text) {
 	return text.replace(/(\[([^\]]+)\])/gm, (_, _full, match) => `${match}`);
 }
 
-const packageMap = new Map([
-	['astro', './packages/astro'],
-	['@astrojs/parser', './packages/astro-parser'],
-	['@astrojs/prism', './packages/astro-prism'],
-	['create-astro', './packages/create-astro'],
-	['@astrojs/markdown-remark', './packages/markdown/remark'],
-	['@astrojs/renderer-lit', './packages/renderers/renderer-lit'],
-	['@astrojs/renderer-preact', './packages/renderers/renderer-preact'],
-	['@astrojs/renderer-react', './packages/renderers/renderer-react'],
-	['@astrojs/renderer-solid', './packages/renderers/renderer-solid'],
-	['@astrojs/renderer-solid', './packages/renderers/renderer-solid'],
-	['@astrojs/renderer-svelte', './packages/renderers/renderer-svelte'],
-	['@astrojs/renderer-vue', './packages/renderers/renderer-vue'],
-	['@astrojs/webapi', './packages/webapi'],
-]);
+const packageMap = new Map();
+async function generatePackageMap() {
+	const packageRoot = new URL('../../packages/', import.meta.url);
+	const packages = await glob(['*/package.json', '*/*/package.json'], {
+		cwd: fileURLToPath(packageRoot),
+	});
+	await Promise.all(
+		packages.map(async (pkg) => {
+			const pkgFile = fileURLToPath(new URL(pkg, packageRoot));
+			const content = await readFile(pkgFile).then((res) => JSON.parse(res.toString()));
+			packageMap.set(content.name, `./packages/${pkg.replace('/package.json', '')}`);
+		})
+	);
+}
 
 async function run() {
+	await generatePackageMap();
 	const releases = process.argv.slice(2)[0];
 	const data = JSON.parse(releases);
 	const packages = await Promise.all(
@@ -75,7 +90,11 @@ async function run() {
 			if (!p) {
 				throw new Error(`Unable to find entrypoint for "${name}"!`);
 			}
-			return { name, version, url: new URL(`${p}/CHANGELOG.md#${version.replace(/\./g, '')}`, baseUrl).toString() };
+			return {
+				name,
+				version,
+				url: new URL(`${p}/CHANGELOG.md#${version.replace(/\./g, '')}`, baseUrl).toString(),
+			};
 		})
 	);
 
@@ -85,7 +104,9 @@ async function run() {
 
 	if (packages.length === 1) {
 		const { name, version, url } = packages[0];
-		console.log(`${emoji} \`${name}@${version}\` ${singularlize(verb)}\nRead the [release notes →](<${url}>)`);
+		console.log(
+			`${emoji} \`${name}@${version}\` ${singularlize(verb)}\nRead the [release notes →](<${url}>)`
+		);
 	} else {
 		console.log(`${emoji} Some ${descriptor} ${pluralize(verb)}\n`);
 		for (const { name, version, url } of packages) {

@@ -1,5 +1,295 @@
 # astro
 
+## 1.0.0-beta.2
+
+### Patch Changes
+
+- [`572ca3dc`](https://github.com/withastro/astro/commit/572ca3dcbeb754d026ef322c5085c6d2b9054347) Thanks [@FredKSchott](https://github.com/FredKSchott)! - fix markdown issue with parsing components in setup
+
+## 1.0.0-beta.1
+
+### Patch Changes
+
+- [`bc12edf0`](https://github.com/withastro/astro/commit/bc12edf09c9a217b02716cf9fd8a747cd5d28c95) Thanks [@FredKSchott](https://github.com/FredKSchott)! - Add missing entry to "files" field in package.json
+
+## 1.0.0-beta.0
+
+### Major Changes
+
+- [#2979](https://github.com/withastro/astro/pull/2979) [`9d7a4b59`](https://github.com/withastro/astro/commit/9d7a4b59b53f8cb274266f5036d1cef841750252) Thanks [@FredKSchott](https://github.com/FredKSchott)! - Welcome to the Astro v1.0.0 Beta! Read the [official announcement](https://astro.build/blog/astro-1-beta-release/) for more details.
+
+## 0.26.1
+
+### Patch Changes
+
+- [#2978](https://github.com/withastro/astro/pull/2978) [`3f0bc5af`](https://github.com/withastro/astro/commit/3f0bc5af57550ee28697ba4910208276bd23fb3f) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Fix edge case where default slots could be rendered too early for Astro components. Slots are now only rendered on demand.
+
+* [#2973](https://github.com/withastro/astro/pull/2973) [`75919537`](https://github.com/withastro/astro/commit/75919537be17f3c11991d5bfc24a7d75b7c32e36) Thanks [@tony-sull](https://github.com/tony-sull)! - Updates the @docs default value listed for config.publicDir and config.outputDir
+
+- [#2974](https://github.com/withastro/astro/pull/2974) [`82445879`](https://github.com/withastro/astro/commit/824458790a45e9b476e8acf6c406c49d28740dea) Thanks [@JuanM04](https://github.com/JuanM04)! - Prevent CLI from hanging
+
+- Updated dependencies [[`ad3c3916`](https://github.com/withastro/astro/commit/ad3c391696c5b9cc350a22831717682e73e25776)]:
+  - @astrojs/markdown-remark@0.8.1
+
+## 0.26.0
+
+### Minor Changes
+
+- [`e425f896`](https://github.com/withastro/astro/commit/e425f896b668d98033ad3b998b50c1f28bc7f6ee) Thanks [@FredKSchott](https://github.com/FredKSchott)! - Implement RFC [#0017](https://github.com/withastro/rfcs/blob/main/proposals/0017-markdown-content-redesign.md)
+
+  - New Markdown API
+  - New `Astro.glob()` API
+  - **BREAKING CHANGE:** Removed `Astro.fetchContent()` (replaced by `Astro.glob()`)
+
+  ```diff
+  // v0.25
+  - let allPosts = Astro.fetchContent('./posts/*.md');
+  // v0.26+
+  + let allPosts = await Astro.glob('./posts/*.md');
+  ```
+
+* [`e425f896`](https://github.com/withastro/astro/commit/e425f896b668d98033ad3b998b50c1f28bc7f6ee) Thanks [@FredKSchott](https://github.com/FredKSchott)! - Implement [RFC0016](https://github.com/withastro/rfcs/blob/main/proposals/0016-style-script-defaults.md) which changes the default behavior of `script`, introduces `is:inline`, and changes `<style global>` to `<style is:global>`
+
+- [`e425f896`](https://github.com/withastro/astro/commit/e425f896b668d98033ad3b998b50c1f28bc7f6ee) Thanks [@FredKSchott](https://github.com/FredKSchott)! - Implements the Astro.request RFC
+
+* [`e425f896`](https://github.com/withastro/astro/commit/e425f896b668d98033ad3b998b50c1f28bc7f6ee) Thanks [@FredKSchott](https://github.com/FredKSchott)! - Update config options to resepect [RFC0019](https://github.com/withastro/rfcs/blob/main/proposals/0019-config-finalization.md)
+
+### Patch Changes
+
+- [`e425f896`](https://github.com/withastro/astro/commit/e425f896b668d98033ad3b998b50c1f28bc7f6ee) Thanks [@FredKSchott](https://github.com/FredKSchott)! - Allow components to return a Response
+
+* [`e425f896`](https://github.com/withastro/astro/commit/e425f896b668d98033ad3b998b50c1f28bc7f6ee) Thanks [@FredKSchott](https://github.com/FredKSchott)! - `--experimental-ssr` now is only required when using a 3rd-party adapter
+
+- [`e425f896`](https://github.com/withastro/astro/commit/e425f896b668d98033ad3b998b50c1f28bc7f6ee) Thanks [@FredKSchott](https://github.com/FredKSchott)! - Improve `Astro.slots` API to support passing arguments to function-based slots.
+
+  This allows for more ergonomic utility components that accept a callback function as a child.
+
+* [`e425f896`](https://github.com/withastro/astro/commit/e425f896b668d98033ad3b998b50c1f28bc7f6ee) Thanks [@FredKSchott](https://github.com/FredKSchott)! - Fixes non-GET API routes in dev with Node 14
+
+- [`e425f896`](https://github.com/withastro/astro/commit/e425f896b668d98033ad3b998b50c1f28bc7f6ee) Thanks [@FredKSchott](https://github.com/FredKSchott)! - Update CLI error format and style
+
+* [`e425f896`](https://github.com/withastro/astro/commit/e425f896b668d98033ad3b998b50c1f28bc7f6ee) Thanks [@FredKSchott](https://github.com/FredKSchott)! - Update `@astrojs/compiler`, fixing some bugs related to RegExp usage in frontmatter
+
+- [`e425f896`](https://github.com/withastro/astro/commit/e425f896b668d98033ad3b998b50c1f28bc7f6ee) Thanks [@FredKSchott](https://github.com/FredKSchott)! - Add a Deno adapter for SSR
+
+* [`e425f896`](https://github.com/withastro/astro/commit/e425f896b668d98033ad3b998b50c1f28bc7f6ee) Thanks [@FredKSchott](https://github.com/FredKSchott)! - Fix for copying public when using SSR and not client JS
+
+* Updated dependencies [[`e425f896`](https://github.com/withastro/astro/commit/e425f896b668d98033ad3b998b50c1f28bc7f6ee)]:
+  - @astrojs/markdown-remark@0.8.0
+
+## 0.25.4
+
+### Patch Changes
+
+- [#2907](https://github.com/withastro/astro/pull/2907) [`22b1432e`](https://github.com/withastro/astro/commit/22b1432e3eed6ff40a0ab383c8f1f06f0df10d62) Thanks [@delucis](https://github.com/delucis)! - Fix typing of `integrations` array in user config
+
+## 0.25.3
+
+### Patch Changes
+
+- [#2918](https://github.com/withastro/astro/pull/2918) [`77354c89`](https://github.com/withastro/astro/commit/77354c89bd606beba71231cce6ce935905de68a7) Thanks [@matthewp](https://github.com/matthewp)! - Prevent CSS from being added to the wrong pages
+
+## 0.25.2
+
+### Patch Changes
+
+- [#2894](https://github.com/withastro/astro/pull/2894) [`9d6e0b5d`](https://github.com/withastro/astro/commit/9d6e0b5dbac1e5c31f580c6234e977a3a3a4918f) Thanks [@FredKSchott](https://github.com/FredKSchott)! - Add the "--experimental-integrations" flag to enable 3rd-party integrations.
+
+* [#2893](https://github.com/withastro/astro/pull/2893) [`f2684512`](https://github.com/withastro/astro/commit/f26845126863e7566e43f118af5d4eb2d991733c) Thanks [@FredKSchott](https://github.com/FredKSchott)! - tailwind: add a default "contents" configuration that works for most Astro projects
+
+## 0.25.1
+
+### Patch Changes
+
+- [#2891](https://github.com/withastro/astro/pull/2891) [`a0d67b1d`](https://github.com/withastro/astro/commit/a0d67b1d252a7ecbebb3d39a24ec11d723f6303e) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Add missing `execa` dependency
+
+## 0.25.0
+
+### Minor Changes
+
+- [#2849](https://github.com/withastro/astro/pull/2849) [`72ef7ae6`](https://github.com/withastro/astro/commit/72ef7ae64a6d0fd17077bf6920ce11613116b659) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Introduce new `astro add` command to automatically configure integrations.
+
+  ```shell
+  npx astro add
+  ```
+
+* [#2833](https://github.com/withastro/astro/pull/2833) [`79545412`](https://github.com/withastro/astro/commit/7954541291a3dd7adbc1d5610e0c2e615d3dde46) Thanks [@natemoo-re](https://github.com/natemoo-re)! - This PR introduces a new internal CSS parser for `@astrojs/compiler`. See [`withastro/compiler#329`](https://github.com/withastro/compiler/pull/329) for more details.
+
+  This fixes Astro's support for modern CSS syntax like `@container`, `@layer`, and nesting. **Note** While Astro now correctly parses this modern syntax, it does not automatically compile features for browser compatability purposes.
+
+- [#2824](https://github.com/withastro/astro/pull/2824) [`0a3d3e51`](https://github.com/withastro/astro/commit/0a3d3e51a66af80fa949ba0f5e2104439d2be634) Thanks [@bholmesdev](https://github.com/bholmesdev)! - Change shiki to our default markdown syntax highlighter. This includes updates to all relevant starter projects that used Prism-specific styles.
+
+### Patch Changes
+
+- [#2879](https://github.com/withastro/astro/pull/2879) [`80034c6c`](https://github.com/withastro/astro/commit/80034c6cbc89761618847e6df43fd49560a05aa9) Thanks [@matthewp](https://github.com/matthewp)! - Netlify Adapter
+
+  This change adds a Netlify adapter that uses Netlify Functions. You can use it like so:
+
+  ```js
+  import { defineConfig } from 'astro/config';
+  import netlify from '@astrojs/netlify/functions';
+
+  export default defineConfig({
+    adapter: netlify(),
+  });
+  ```
+
+* [#2871](https://github.com/withastro/astro/pull/2871) [`5029382a`](https://github.com/withastro/astro/commit/5029382a8cab17f048372ee878d0778c89998009) Thanks [@FredKSchott](https://github.com/FredKSchott)! - Fix a bug where tailwind integration wouldn't apply to markdown pages
+
+- [#2852](https://github.com/withastro/astro/pull/2852) [`96372e6b`](https://github.com/withastro/astro/commit/96372e6beb976b57a8c52fd7c65f126899325160) Thanks [@bholmesdev](https://github.com/bholmesdev)! - Fix "isSelfAccepting" exception when using the new @astrojs/react integration in development
+
+* [#2798](https://github.com/withastro/astro/pull/2798) [`4c25a1c2`](https://github.com/withastro/astro/commit/4c25a1c2eacf897427a7d6dac3bf476ef56799de) Thanks [@matthewp](https://github.com/matthewp)! - Implement APIs for headers for SSR flag
+
+- [#2855](https://github.com/withastro/astro/pull/2855) [`5e52814d`](https://github.com/withastro/astro/commit/5e52814d97a5723dbe7ebb32fbe040a7a4c0ea77) Thanks [@matthewp](https://github.com/matthewp)! - Adds support for the Node adapter (SSR)
+
+  This provides the first SSR adapter available using the `integrations` API. It is a Node.js adapter that can be used with the `http` module or any framework that wraps it, like Express.
+
+  In your astro.config.mjs use:
+
+  ```js
+  import nodejs from '@astrojs/node';
+
+  export default {
+    adapter: nodejs(),
+  };
+  ```
+
+  After performing a build there will be a `dist/server/entry.mjs` module that works like a middleware function. You can use with any framework that supports the Node `request` and `response` objects. For example, with Express you can do:
+
+  ```js
+  import express from 'express';
+  import { handler as ssrHandler } from '@astrojs/node';
+
+  const app = express();
+  app.use(handler);
+
+  app.listen(8080);
+  ```
+
+* [#2859](https://github.com/withastro/astro/pull/2859) [`c781b12f`](https://github.com/withastro/astro/commit/c781b12f87398d51a6ecf5dcb8b35afb08591c29) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Ensure private, internal APIs are not enumerable
+
+- [#2835](https://github.com/withastro/astro/pull/2835) [`77ebab8b`](https://github.com/withastro/astro/commit/77ebab8bb27d67bc45a5af160d6b545521897802) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Fix missing `postcss-load-config` dependency
+
+* [#2878](https://github.com/withastro/astro/pull/2878) [`2db97f10`](https://github.com/withastro/astro/commit/2db97f10dc50f9498413181b78c477fe8833895b) Thanks [@bholmesdev](https://github.com/bholmesdev)! - Move the built-in `Prism` component from `astro/components` to `@astrojs/prism/component`.
+
+- [#2857](https://github.com/withastro/astro/pull/2857) [`1061d647`](https://github.com/withastro/astro/commit/1061d6477af328e93c9a727e70900ae20c0116c8) Thanks [@bholmesdev](https://github.com/bholmesdev)! - Improve granularity of production build logs. This now lists:
+  - the "data collection" build step, with timeout warnings for larger imports. This is useful for understanding large `import.meta.glob` calls.
+  - the Vite client bundling step. This logs all Vite production build info to clarify what assets are built alongside your HTML.
+  - the route generation step, complete with all output HTML files for a given input file. This is especially useful when debugging `getStaticPaths`.
+  - fixes "0 pages in Infinityms" log when building to SSR
+
+* [#2825](https://github.com/withastro/astro/pull/2825) [`1cd7184c`](https://github.com/withastro/astro/commit/1cd7184ca6fa6e60a69918e461f42c055e8a795e) Thanks [@hlynursmari1](https://github.com/hlynursmari1)! - Fix island deduplication ignoring props.Re-resolves an issue initially patched in https://github.com/withastro/astro/pull/846 but seemingly lost in the 0.21.0 mega-merge (https://github.com/withastro/astro/commit/d84bfe719a546ad855640338d5ed49ad3aa4ccb4).This change makes the component render step account for all props, even if they don't affect the generated HTML, when deduplicating island mounts.
+
+- [#2873](https://github.com/withastro/astro/pull/2873) [`e4025d1f`](https://github.com/withastro/astro/commit/e4025d1f530310d6ab951109f4f53878a307471a) Thanks [@matthewp](https://github.com/matthewp)! - Improves the build by building to a single file for rendering
+
+* [#2815](https://github.com/withastro/astro/pull/2815) [`7b9d042d`](https://github.com/withastro/astro/commit/7b9d042dde0c6ae74225de208222e0addf5f4989) Thanks [@matthewp](https://github.com/matthewp)! - Allows dynamic routes in SSR to avoid implementing getStaticPaths
+
+- [#2875](https://github.com/withastro/astro/pull/2875) [`55712277`](https://github.com/withastro/astro/commit/5571227718442e1ec38f4553863b6160b74df722) Thanks [@FredKSchott](https://github.com/FredKSchott)! - Generalize output assets to avoid adblocker false positives
+
+* [#2848](https://github.com/withastro/astro/pull/2848) [`981e2a83`](https://github.com/withastro/astro/commit/981e2a839b5a0292513bf2009216250f2a8730eb) Thanks [@FredKSchott](https://github.com/FredKSchott)! - add missing injected "page" scripts into markdown pages
+
+- [#2872](https://github.com/withastro/astro/pull/2872) [`098f6f6b`](https://github.com/withastro/astro/commit/098f6f6b06396441c576dc689d8552629ef260e1) Thanks [@bholmesdev](https://github.com/bholmesdev)! - Fix `isSelfAccepting` errors when using the Preact integration with the Astro dev server
+
+- Updated dependencies [[`0a3d3e51`](https://github.com/withastro/astro/commit/0a3d3e51a66af80fa949ba0f5e2104439d2be634), [`2db97f10`](https://github.com/withastro/astro/commit/2db97f10dc50f9498413181b78c477fe8833895b), [`d763ec18`](https://github.com/withastro/astro/commit/d763ec183ea391ad79ca16bf2b2e76848fc1180c)]:
+  - @astrojs/markdown-remark@0.7.0
+  - @astrojs/prism@0.4.1
+
+## 0.25.0-next.3
+
+### Patch Changes
+
+- [#2871](https://github.com/withastro/astro/pull/2871) [`5029382a`](https://github.com/withastro/astro/commit/5029382a8cab17f048372ee878d0778c89998009) Thanks [@FredKSchott](https://github.com/FredKSchott)! - Fix a bug where tailwind integration wouldn't apply to markdown pages
+
+* [#2855](https://github.com/withastro/astro/pull/2855) [`5e52814d`](https://github.com/withastro/astro/commit/5e52814d97a5723dbe7ebb32fbe040a7a4c0ea77) Thanks [@matthewp](https://github.com/matthewp)! - Adds support for the Node adapter (SSR)
+
+  This provides the first SSR adapter available using the `integrations` API. It is a Node.js adapter that can be used with the `http` module or any framework that wraps it, like Express.
+
+  In your astro.config.mjs use:
+
+  ```js
+  import nodejs from '@astrojs/node';
+
+  export default {
+    adapter: nodejs(),
+  };
+  ```
+
+  After performing a build there will be a `dist/server/entry.mjs` module that works like a middleware function. You can use with any framework that supports the Node `request` and `response` objects. For example, with Express you can do:
+
+  ```js
+  import express from 'express';
+  import { handler as ssrHandler } from '@astrojs/node';
+
+  const app = express();
+  app.use(handler);
+
+  app.listen(8080);
+  ```
+
+- [#2859](https://github.com/withastro/astro/pull/2859) [`c781b12f`](https://github.com/withastro/astro/commit/c781b12f87398d51a6ecf5dcb8b35afb08591c29) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Ensure private, internal APIs are not enumerable
+
+* [#2878](https://github.com/withastro/astro/pull/2878) [`2db97f10`](https://github.com/withastro/astro/commit/2db97f10dc50f9498413181b78c477fe8833895b) Thanks [@bholmesdev](https://github.com/bholmesdev)! - Move the built-in `Prism` component from `astro/components` to `@astrojs/prism/component`.
+
+- [#2857](https://github.com/withastro/astro/pull/2857) [`1061d647`](https://github.com/withastro/astro/commit/1061d6477af328e93c9a727e70900ae20c0116c8) Thanks [@bholmesdev](https://github.com/bholmesdev)! - Improve granularity of production build logs. This now lists:
+  - the "data collection" build step, with timeout warnings for larger imports. This is useful for understanding large `import.meta.glob` calls.
+  - the Vite client bundling step. This logs all Vite production build info to clarify what assets are built alongside your HTML.
+  - the route generation step, complete with all output HTML files for a given input file. This is especially useful when debugging `getStaticPaths`.
+  - fixes "0 pages in Infinityms" log when building to SSR
+
+* [#2873](https://github.com/withastro/astro/pull/2873) [`e4025d1f`](https://github.com/withastro/astro/commit/e4025d1f530310d6ab951109f4f53878a307471a) Thanks [@matthewp](https://github.com/matthewp)! - Improves the build by building to a single file for rendering
+
+- [#2875](https://github.com/withastro/astro/pull/2875) [`55712277`](https://github.com/withastro/astro/commit/5571227718442e1ec38f4553863b6160b74df722) Thanks [@FredKSchott](https://github.com/FredKSchott)! - Generalize output assets to avoid adblocker false positives
+
+* [#2872](https://github.com/withastro/astro/pull/2872) [`098f6f6b`](https://github.com/withastro/astro/commit/098f6f6b06396441c576dc689d8552629ef260e1) Thanks [@bholmesdev](https://github.com/bholmesdev)! - Fix `isSelfAccepting` errors when using the Preact integration with the Astro dev server
+
+* Updated dependencies [[`2db97f10`](https://github.com/withastro/astro/commit/2db97f10dc50f9498413181b78c477fe8833895b), [`d763ec18`](https://github.com/withastro/astro/commit/d763ec183ea391ad79ca16bf2b2e76848fc1180c)]:
+  - @astrojs/prism@0.4.1-next.0
+  - @astrojs/markdown-remark@0.7.0-next.1
+
+## 0.25.0-next.2
+
+### Patch Changes
+
+- [#2852](https://github.com/withastro/astro/pull/2852) [`96372e6b`](https://github.com/withastro/astro/commit/96372e6beb976b57a8c52fd7c65f126899325160) Thanks [@bholmesdev](https://github.com/bholmesdev)! - Fix "isSelfAccepting" exception when using the new @astrojs/react integration in development
+
+* [#2848](https://github.com/withastro/astro/pull/2848) [`981e2a83`](https://github.com/withastro/astro/commit/981e2a839b5a0292513bf2009216250f2a8730eb) Thanks [@FredKSchott](https://github.com/FredKSchott)! - add missing injected "page" scripts into markdown pages
+
+## 0.25.0-next.1
+
+### Patch Changes
+
+- [#2835](https://github.com/withastro/astro/pull/2835) [`77ebab8b`](https://github.com/withastro/astro/commit/77ebab8bb27d67bc45a5af160d6b545521897802) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Fix missing `postcss-load-config` dependency
+
+## 0.25.0-next.0
+
+### Minor Changes
+
+- [#2833](https://github.com/withastro/astro/pull/2833) [`79545412`](https://github.com/withastro/astro/commit/7954541291a3dd7adbc1d5610e0c2e615d3dde46) Thanks [@natemoo-re](https://github.com/natemoo-re)! - This PR introduces a new internal CSS parser for `@astrojs/compiler`. See [`withastro/compiler#329`](https://github.com/withastro/compiler/pull/329) for more details.
+
+  This fixes Astro's support for modern CSS syntax like `@container`, `@layer`, and nesting. **Note** While Astro now correctly parses this modern syntax, it does not automatically compile features for browser compatability purposes.
+
+* [#2824](https://github.com/withastro/astro/pull/2824) [`0a3d3e51`](https://github.com/withastro/astro/commit/0a3d3e51a66af80fa949ba0f5e2104439d2be634) Thanks [@bholmesdev](https://github.com/bholmesdev)! - Change shiki to our default markdown syntax highlighter. This includes updates to all relevant starter projects that used Prism-specific styles.
+
+### Patch Changes
+
+- [#2798](https://github.com/withastro/astro/pull/2798) [`4c25a1c2`](https://github.com/withastro/astro/commit/4c25a1c2eacf897427a7d6dac3bf476ef56799de) Thanks [@matthewp](https://github.com/matthewp)! - Implement APIs for headers for SSR flag
+
+* [#2825](https://github.com/withastro/astro/pull/2825) [`1cd7184c`](https://github.com/withastro/astro/commit/1cd7184ca6fa6e60a69918e461f42c055e8a795e) Thanks [@hlynursmari1](https://github.com/hlynursmari1)! - Fix island deduplication ignoring props.Re-resolves an issue initially patched in https://github.com/withastro/astro/pull/846 but seemingly lost in the 0.21.0 mega-merge (https://github.com/withastro/astro/commit/d84bfe719a546ad855640338d5ed49ad3aa4ccb4).This change makes the component render step account for all props, even if they don't affect the generated HTML, when deduplicating island mounts.
+
+- [#2815](https://github.com/withastro/astro/pull/2815) [`7b9d042d`](https://github.com/withastro/astro/commit/7b9d042dde0c6ae74225de208222e0addf5f4989) Thanks [@matthewp](https://github.com/matthewp)! - Allows dynamic routes in SSR to avoid implementing getStaticPaths
+
+- Updated dependencies [[`0a3d3e51`](https://github.com/withastro/astro/commit/0a3d3e51a66af80fa949ba0f5e2104439d2be634)]:
+  - @astrojs/markdown-remark@0.7.0-next.0
+
+## 0.24.3
+
+### Patch Changes
+
+- [#2806](https://github.com/withastro/astro/pull/2806) [`9e59ec92`](https://github.com/withastro/astro/commit/9e59ec921fe539233a1a22b9f0c34ca3cfd05247) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Fix a warning from Vite regarding internal sourcemaps
+
+- Updated dependencies [[`79282163`](https://github.com/withastro/astro/commit/79282163e229bfe332b1221be3099f751b05807b)]:
+  - @astrojs/renderer-svelte@0.5.2
+
 ## 0.24.2
 
 ### Patch Changes
