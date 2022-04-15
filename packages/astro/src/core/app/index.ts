@@ -19,7 +19,6 @@ import {
 	createModuleScriptElementWithSrcSet,
 } from '../render/ssr-element.js';
 import { prependForwardSlash } from '../path.js';
-import { createRequest } from '../request.js';
 
 export class App {
 	#manifest: Manifest;
@@ -82,7 +81,7 @@ export class App {
 			legacyBuild: false,
 			links,
 			logging: this.#logging,
-			markdownRender: manifest.markdown.render,
+			markdown: manifest.markdown,
 			mod,
 			origin: url.origin,
 			pathname: url.pathname,

@@ -1,5 +1,17 @@
 # @astrojs/netlify
 
+## 0.2.3
+
+### Patch Changes
+
+- [#3092](https://github.com/withastro/astro/pull/3092) [`a5caf08e`](https://github.com/withastro/astro/commit/a5caf08e2494e9f779baa6b288d277490dd436b8) Thanks [@matthewp](https://github.com/matthewp)! - Fixes setting multiple cookies with the Netlify adapter
+
+## 0.2.2
+
+### Patch Changes
+
+- [#3079](https://github.com/withastro/astro/pull/3079) [`9f248b05`](https://github.com/withastro/astro/commit/9f248b0563828db0e01e685aac177eaf8107906e) Thanks [@hippotastic](https://github.com/hippotastic)! - Make Netlify adapter actually append redirects
+
 ## 0.2.1
 
 ### Patch Changes
