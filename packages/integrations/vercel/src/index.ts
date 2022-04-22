@@ -53,6 +53,12 @@ export default function vercel(): AstroIntegration {
 				buildConfig.serverEntry = `${ENTRYFILE}.js`;
 				buildConfig.client = new URL('./static/', _config.outDir);
 				buildConfig.server = new URL('./server/pages/', _config.outDir);
+
+				if (String(process.env.ENABLE_FILE_SYSTEM_API) !== '1') {
+					console.warn(
+						`The enviroment variable "ENABLE_FILE_SYSTEM_API" was not found. Make sure you have it set to "1" in your Vercel project.\nLearn how to set enviroment variables here: https://vercel.com/docs/concepts/projects/environment-variables`
+					);
+				}
 			},
 			'astro:build:done': async ({ routes }) => {
 				// Bundle dependecies
@@ -81,11 +87,49 @@ export default function vercel(): AstroIntegration {
 					version: 3,
 					basePath: '/',
 					pages404: false,
-					rewrites: staticRoutes.map((route) => ({
-						source: route.pathname,
-						regex: route.pattern.toString(),
-						destination: `/${ENTRYFILE}`,
-					})),
+					redirects:
+						// Extracted from Next.js v12.1.5
+						_config.trailingSlash === 'always'
+							? [
+									{
+										source: '/:file((?!\\.well-known(?:/.*)?)(?:[^/]+/)*[^/]+\\.\\w+)/',
+										destination: '/:file',
+										internal: true,
+										statusCode: 308,
+										regex: '^(?:/((?!\\.well-known(?:/.*)?)(?:[^/]+/)*[^/]+\\.\\w+))/$',
+									},
+									{
+										source: '/:notfile((?!\\.well-known(?:/.*)?)(?:[^/]+/)*[^/\\.]+)',
+										destination: '/:notfile/',
+										internal: true,
+										statusCode: 308,
+										regex: '^(?:/((?!\\.well-known(?:/.*)?)(?:[^/]+/)*[^/\\.]+))$',
+									},
+							  ]
+							: _config.trailingSlash === 'never'
+							? [
+									{
+										source: '/:path+/',
+										destination: '/:path+',
+										internal: true,
+										statusCode: 308,
+										regex: '^(?:/((?:[^/]+?)(?:/(?:[^/]+?))*))/$',
+									},
+							  ]
+							: undefined,
+					rewrites: staticRoutes.map((route) => {
+						let source = route.pathname as string;
+
+						if (_config.trailingSlash === 'always' && !source.endsWith('/')) {
+							source += '/';
+						}
+
+						return {
+							source,
+							regex: route.pattern.toString(),
+							destination: `/${ENTRYFILE}`,
+						};
+					}),
 					dynamicRoutes: dynamicRoutes.map((route) => ({
 						page: `/${ENTRYFILE}`,
 						regex: route.pattern.toString(),
