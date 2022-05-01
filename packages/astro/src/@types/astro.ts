@@ -2,7 +2,14 @@ import type { AddressInfo } from 'net';
 import type * as babel from '@babel/core';
 import type * as vite from 'vite';
 import { z } from 'zod';
-import type { ShikiConfig, RemarkPlugins, RehypePlugins } from '@astrojs/markdown-remark';
+import type {
+	ShikiConfig,
+	RemarkPlugins,
+	RehypePlugins,
+	MarkdownHeader,
+	MarkdownMetadata,
+	MarkdownRenderingResult,
+} from '@astrojs/markdown-remark';
 import type { AstroConfigSchema } from '../core/config';
 import type { AstroComponentFactory, Metadata } from '../runtime/server';
 import type { ViteConfigWithSSR } from '../core/create-vite';
@@ -25,6 +32,7 @@ export interface AstroBuiltinAttributes {
 		| string;
 	'set:html'?: any;
 	'set:text'?: any;
+	'is:raw'?: boolean;
 }
 
 export interface AstroDefineVarsAttribute {
@@ -529,7 +537,7 @@ export interface AstroUserConfig {
 		 * @description
 		 * Pass a custom [Remark](https://github.com/remarkjs/remark) plugin to customize how your Markdown is built.
 		 *
-		 * **Note:** Enabling custom `remarkPlugins` or `rehypePlugins` removes Astro's built-in support for [GitHub-flavored Markdown](https://github.github.com/gfm/) support, [Footnotes](https://github.com/remarkjs/remark-footnotes) syntax, [Smartypants](https://github.com/silvenon/remark-smartypants). You must explicitly add these plugins to your `astro.config.mjs` file, if desired.
+		 * **Note:** Enabling custom `remarkPlugins` or `rehypePlugins` removes Astro's built-in support for [GitHub-flavored Markdown](https://github.github.com/gfm/) support and [Smartypants](https://github.com/silvenon/remark-smartypants). You must explicitly add these plugins to your `astro.config.mjs` file, if desired.
 		 *
 		 * ```js
 		 * {
@@ -548,13 +556,13 @@ export interface AstroUserConfig {
 		 * @description
 		 * Pass a custom [Rehype](https://github.com/remarkjs/remark-rehype) plugin to customize how your Markdown is built.
 		 *
-		 * **Note:** Enabling custom `remarkPlugins` or `rehypePlugins` removes Astro's built-in support for [GitHub-flavored Markdown](https://github.github.com/gfm/) support, [Footnotes](https://github.com/remarkjs/remark-footnotes) syntax, [Smartypants](https://github.com/silvenon/remark-smartypants). You must explicitly add these plugins to your `astro.config.mjs` file, if desired.
+		 * **Note:** Enabling custom `remarkPlugins` or `rehypePlugins` removes Astro's built-in support for [GitHub-flavored Markdown](https://github.github.com/gfm/) support and [Smartypants](https://github.com/silvenon/remark-smartypants). You must explicitly add these plugins to your `astro.config.mjs` file, if desired.
 		 *
 		 * ```js
 		 * {
 		 *   markdown: {
 		 *     // Example: The default set of rehype plugins used by Astro
-		 *     rehypePlugins: [['rehype-toc', { headings: ['h2', 'h3'] }], [addClasses, { 'h1,h2,h3': 'title' }], 'rehype-slug'],
+		 *     rehypePlugins: ['rehype-slug', ['rehype-toc', { headings: ['h2', 'h3'] }], [addClasses, { 'h1,h2,h3': 'title' }]],
 		 *   },
 		 * };
 		 * ```
@@ -725,7 +733,13 @@ export interface MarkdownInstance<T extends Record<string, any>> {
 	file: string;
 	url: string | undefined;
 	Content: AstroComponentFactory;
-	getHeaders(): Promise<{ depth: number; slug: string; text: string }[]>;
+	getHeaders(): Promise<MarkdownHeader[]>;
+	default: () => Promise<{
+		metadata: MarkdownMetadata;
+		frontmatter: MarkdownContent;
+		$$metadata: Metadata;
+		default: AstroComponentFactory;
+	}>;
 }
 
 export type GetHydrateCallback = () => Promise<
@@ -767,16 +781,19 @@ export interface ManifestData {
 	routes: RouteData[];
 }
 
-export interface MarkdownParserResponse {
+export interface MarkdownParserResponse extends MarkdownRenderingResult {
 	frontmatter: {
 		[key: string]: any;
 	};
-	metadata: {
-		headers: any[];
-		source: string;
-		html: string;
-	};
-	code: string;
+}
+
+/**
+ * The `content` prop given to a Layout
+ * https://docs.astro.build/guides/markdown-content/#markdown-layouts
+ */
+export interface MarkdownContent {
+	[key: string]: any;
+	astro: MarkdownMetadata;
 }
 
 /**
