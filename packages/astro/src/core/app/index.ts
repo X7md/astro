@@ -20,6 +20,9 @@ import {
 } from '../render/ssr-element.js';
 import { prependForwardSlash } from '../path.js';
 
+export const pagesVirtualModuleId = '@astrojs-pages-virtual-entry';
+export const resolvedPagesVirtualModuleId = '\0' + pagesVirtualModuleId;
+
 export class App {
 	#manifest: Manifest;
 	#manifestData: ManifestData;
@@ -105,14 +108,12 @@ export class App {
 		}
 
 		let html = result.html;
+		let init = result.response;
+		let headers = init.headers as Headers;
 		let bytes = this.#encoder.encode(html);
-		return new Response(bytes, {
-			status: 200,
-			headers: {
-				'Content-Type': 'text/html',
-				'Content-Length': bytes.byteLength.toString(),
-			},
-		});
+		headers.set('Content-Type', 'text/html');
+		headers.set('Content-Length', bytes.byteLength.toString());
+		return new Response(bytes, init);
 	}
 
 	async #callEndpoint(
