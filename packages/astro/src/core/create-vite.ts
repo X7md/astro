@@ -21,6 +21,7 @@ const ALWAYS_EXTERNAL = new Set([
 	...builtinModules.map((name) => `node:${name}`),
 	'@sveltejs/vite-plugin-svelte',
 	'micromark-util-events-to-acorn',
+	'@astrojs/markdown-remark',
 	'serialize-javascript',
 	'node-fetch',
 	'prismjs',
@@ -55,6 +56,7 @@ export async function createVite(
 		logLevel: 'warn', // log warnings and errors only
 		optimizeDeps: {
 			entries: ['src/**/*'], // Try and scan a user’s project (won’t catch everything),
+			exclude: ['node-fetch'],
 		},
 		plugins: [
 			configAliasVitePlugin({ config: astroConfig }),

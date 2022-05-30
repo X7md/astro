@@ -38,6 +38,7 @@ export async function staticBuild(opts: StaticBuildOptions) {
 
 	// Build internals needed by the CSS plugin
 	const internals = createBuildInternals();
+	const uniqueHoistedIds = new Map<string, string>();
 
 	const timer: Record<string, number> = {};
 
@@ -56,7 +57,7 @@ export async function staticBuild(opts: StaticBuildOptions) {
 
 			// Track client:only usage so we can map their CSS back to the Page they are used in.
 			const clientOnlys = Array.from(metadata.clientOnlyComponentPaths());
-			trackClientOnlyPageDatas(internals, pageData, clientOnlys, astroConfig);
+			trackClientOnlyPageDatas(internals, pageData, clientOnlys);
 
 			const topLevelImports = new Set([
 				// Any component that gets hydrated
@@ -76,9 +77,27 @@ export async function staticBuild(opts: StaticBuildOptions) {
 			// Add hoisted scripts
 			const hoistedScripts = new Set(metadata.hoistedScriptPaths());
 			if (hoistedScripts.size) {
-				const moduleId = npath.posix.join(astroModuleId, 'hoisted.js');
-				internals.hoistedScriptIdToHoistedMap.set(moduleId, hoistedScripts);
+				const uniqueHoistedId = JSON.stringify(Array.from(hoistedScripts).sort());
+				let moduleId: string;
+
+				// If we're already tracking this set of hoisted scripts, get the unique id
+				if (uniqueHoistedIds.has(uniqueHoistedId)) {
+					moduleId = uniqueHoistedIds.get(uniqueHoistedId)!;
+				} else {
+					// Otherwise, create a unique id for this set of hoisted scripts
+					moduleId = `/astro/hoisted.js?q=${uniqueHoistedIds.size}`;
+					uniqueHoistedIds.set(uniqueHoistedId, moduleId);
+				}
 				topLevelImports.add(moduleId);
+
+				// Make sure to track that this page uses this set of hoisted scripts
+				if (internals.hoistedScriptIdToPagesMap.has(moduleId)) {
+					const pages = internals.hoistedScriptIdToPagesMap.get(moduleId);
+					pages!.add(astroModuleId);
+				} else {
+					internals.hoistedScriptIdToPagesMap.set(moduleId, new Set([astroModuleId]));
+					internals.hoistedScriptIdToHoistedMap.set(moduleId, hoistedScripts);
+				}
 			}
 
 			for (const specifier of topLevelImports) {
@@ -101,7 +120,13 @@ export async function staticBuild(opts: StaticBuildOptions) {
 
 	// Build your project (SSR application code, assets, client JS, etc.)
 	timer.ssr = performance.now();
-	info(opts.logging, 'build', 'Building for SSR...');
+	info(
+		opts.logging,
+		'build',
+		isBuildingToSSR(astroConfig)
+			? 'Building SSR entrypoints...'
+			: 'Building entrypoints for prerendering...'
+	);
 	const ssrResult = (await ssrBuild(opts, internals, pageInput)) as RollupOutput;
 	info(opts.logging, 'build', dim(`Completed in ${getTimeStat(timer.ssr, performance.now())}.`));
 
@@ -120,8 +145,8 @@ async function ssrBuild(opts: StaticBuildOptions, internals: BuildInternals, inp
 	const ssr = isBuildingToSSR(astroConfig);
 	const out = ssr ? opts.buildConfig.server : astroConfig.outDir;
 
-	const viteBuildConfig = {
-		logLevel: 'error',
+	const viteBuildConfig: ViteConfigWithSSR = {
+		logLevel: opts.viteConfig.logLevel ?? 'error',
 		mode: 'production',
 		css: viteConfig.css,
 		build: {
@@ -136,6 +161,7 @@ async function ssrBuild(opts: StaticBuildOptions, internals: BuildInternals, inp
 					entryFileNames: opts.buildConfig.serverEntry,
 					chunkFileNames: 'chunks/chunk.[hash].mjs',
 					assetFileNames: 'assets/asset.[hash][extname]',
+					...viteConfig.build?.rollupOptions?.output,
 				},
 			},
 			ssr: true,
@@ -165,7 +191,7 @@ async function ssrBuild(opts: StaticBuildOptions, internals: BuildInternals, inp
 		base: astroConfig.base,
 		ssr: viteConfig.ssr,
 		resolve: viteConfig.resolve,
-	} as ViteConfigWithSSR;
+	};
 
 	await runHookBuildSetup({
 		config: astroConfig,
@@ -216,6 +242,7 @@ async function clientBuild(
 					entryFileNames: 'entry.[hash].js',
 					chunkFileNames: 'chunks/chunk.[hash].js',
 					assetFileNames: 'assets/asset.[hash][extname]',
+					...viteConfig.build?.rollupOptions?.output,
 				},
 				preserveEntrySignatures: 'exports-only',
 			},

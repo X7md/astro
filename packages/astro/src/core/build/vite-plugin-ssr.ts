@@ -69,11 +69,20 @@ if(_start in adapter) {
 			return void 0;
 		},
 		async generateBundle(_opts, bundle) {
-			const staticFiles = await glob('**/*', {
-				cwd: fileURLToPath(buildOpts.buildConfig.client),
-			});
+			const staticFiles = new Set(
+				await glob('**/*', {
+					cwd: fileURLToPath(buildOpts.buildConfig.client),
+				})
+			);
 
-			const manifest = buildManifest(buildOpts, internals, staticFiles);
+			// Add assets from this SSR chunk as well.
+			for (const [_chunkName, chunk] of Object.entries(bundle)) {
+				if (chunk.type === 'asset') {
+					staticFiles.add(chunk.fileName);
+				}
+			}
+
+			const manifest = buildManifest(buildOpts, internals, Array.from(staticFiles));
 			await runHookBuildSsr({ config: buildOpts.astroConfig, manifest });
 
 			for (const [_chunkName, chunk] of Object.entries(bundle)) {
@@ -109,8 +118,13 @@ function buildManifest(
 		routes.push({
 			file: '',
 			links: Array.from(pageData.css),
-			scripts,
-			routeData: serializeRouteData(pageData.route),
+			scripts: [
+				...scripts,
+				...astroConfig._ctx.scripts
+					.filter((script) => script.stage === 'head-inline')
+					.map(({ stage, content }) => ({ stage, children: content })),
+			],
+			routeData: serializeRouteData(pageData.route, astroConfig.trailingSlash),
 		});
 	}
 
@@ -122,6 +136,7 @@ function buildManifest(
 	const ssrManifest: SerializedSSRManifest = {
 		routes,
 		site: astroConfig.site,
+		base: astroConfig.base,
 		markdown: astroConfig.markdown,
 		pageMap: null as any,
 		renderers: [],

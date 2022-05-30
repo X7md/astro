@@ -1,5 +1,128 @@
 # astro
 
+## 1.0.0-beta.36
+
+### Minor Changes
+
+- [#3452](https://github.com/withastro/astro/pull/3452) [`47d1a8d5`](https://github.com/withastro/astro/commit/47d1a8d59cb3d88655de3d7658026e84843cb043) Thanks [@bholmesdev](https://github.com/bholmesdev)! - Add content parsing helpers to imported markdown files. This exposes both the raw markdown content when using rawContent() and the parsed Astro syntax when using compiledContent()
+
+## 1.0.0-beta.35
+
+### Patch Changes
+
+- [#3439](https://github.com/withastro/astro/pull/3439) [`ac3c60d4`](https://github.com/withastro/astro/commit/ac3c60d48d5c8bbfb783434cafa75b9ffb7c7a7b) Thanks [@matthewp](https://github.com/matthewp)! - Fixes importing npm packages within CSS
+
+  This change fixes a longstanding bug where the string `VITE_ASSET` was left in CSS when trying to import CSS packages. The fix comes thanks to an upstream Vite feature that allows us to hand off most of the CSS bundling work to Vite.
+
+* [#3438](https://github.com/withastro/astro/pull/3438) [`79b9ebc8`](https://github.com/withastro/astro/commit/79b9ebc83ab7e190bd2894338e51e7f3f41e04d2) Thanks [@userquin](https://github.com/userquin)! - Expose route dist URL on SSG
+
+## 1.0.0-beta.34
+
+### Patch Changes
+
+- [#3444](https://github.com/withastro/astro/pull/3444) [`51db2b9b`](https://github.com/withastro/astro/commit/51db2b9b4efd899bdd7efc481a5f226b3b040614) Thanks [@bholmesdev](https://github.com/bholmesdev)! - Fix: markdown imports failing due to internal dependency issue
+
+- Updated dependencies [[`51db2b9b`](https://github.com/withastro/astro/commit/51db2b9b4efd899bdd7efc481a5f226b3b040614)]:
+  - @astrojs/markdown-remark@0.10.1
+
+## 1.0.0-beta.33
+
+### Patch Changes
+
+- [#3426](https://github.com/withastro/astro/pull/3426) [`946630a1`](https://github.com/withastro/astro/commit/946630a112dca39d6afc32ef02edceda94a604cb) Thanks [@bholmesdev](https://github.com/bholmesdev)! - Logs: Add "ssr.noExternal" hint for CSS loaded from npm packages
+
+* [#3434](https://github.com/withastro/astro/pull/3434) [`4e3b405e`](https://github.com/withastro/astro/commit/4e3b405e9eb03f7c286234a30ca45c26e3e17fcf) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Respect user's configured vite logLevel during build
+
+- [#3423](https://github.com/withastro/astro/pull/3423) [`463a1c21`](https://github.com/withastro/astro/commit/463a1c214779e0558bcd99c30294e1a14a97232e) Thanks [@matthewp](https://github.com/matthewp)! - Fix relative inline scripts on Windows
+
+* [#3384](https://github.com/withastro/astro/pull/3384) [`296fff2c`](https://github.com/withastro/astro/commit/296fff2cffd4632f2d2e891069f52f6859a5c076) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Fix long-standing bug where a `class` attribute inside of a spread prop will cause duplicate `class` attributes
+
+- [#3433](https://github.com/withastro/astro/pull/3433) [`4ca60e93`](https://github.com/withastro/astro/commit/4ca60e9344f882ee1a216ec66fb409c88c740641) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Fix build issue where hoisted scripts would be duplicated per page
+
+* [#3422](https://github.com/withastro/astro/pull/3422) [`0209d627`](https://github.com/withastro/astro/commit/0209d6276c6ed86914b6433e223628010b6a7dfd) Thanks [@tony-sull](https://github.com/tony-sull)! - Updates component hydration scripts to use absolute paths for script imports
+
+- [#3410](https://github.com/withastro/astro/pull/3410) [`cfae9760`](https://github.com/withastro/astro/commit/cfae9760b252052b6189e96398b819a4337634a8) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Significantally more stable behavior for "Markdown + Components" usage, which now handles component serialization much more similarly to MDX. Also supports switching between Components and Markdown without extra newlines, removes wrapping `<p>` tags from standalone components, and improves JSX expression handling.
+
+- Updated dependencies [[`cfae9760`](https://github.com/withastro/astro/commit/cfae9760b252052b6189e96398b819a4337634a8)]:
+  - @astrojs/markdown-remark@0.10.0
+
+## 1.0.0-beta.32
+
+### Patch Changes
+
+- [#3407](https://github.com/withastro/astro/pull/3407) [`63735084`](https://github.com/withastro/astro/commit/63735084585735009186498db95e4bb7d3d62b90) Thanks [@tony-sull](https://github.com/tony-sull)! - Adds a check during build to make sure routing priority is always enforced in the final dist output
+
+* [#3398](https://github.com/withastro/astro/pull/3398) [`fb5572be`](https://github.com/withastro/astro/commit/fb5572bebd211786bc8a08eb073bc08af97287bc) Thanks [@bholmesdev](https://github.com/bholmesdev)! - Fix component usage in imported markdown files
+
+- [#3408](https://github.com/withastro/astro/pull/3408) [`b26d48d2`](https://github.com/withastro/astro/commit/b26d48d275630a0da38edcf2b6832720dc96636f) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Fix hydration when rendering `<head>` elements inside of a component
+
+* [#3421](https://github.com/withastro/astro/pull/3421) [`63c26c1b`](https://github.com/withastro/astro/commit/63c26c1b24a07a313e0bcf99b35089e23f0cf7fc) Thanks [@retronav](https://github.com/retronav)! - Fix GitHub Issues issue creation link.
+
+- [#3393](https://github.com/withastro/astro/pull/3393) [`d372d29e`](https://github.com/withastro/astro/commit/d372d29ef8f540fca077f5e1318a2bbb5e7ec360) Thanks [@tony-sull](https://github.com/tony-sull)! - Fixes a bug in the canonical URL when using `1` as a route parameter in `getStaticPaths()`
+
+* [#3417](https://github.com/withastro/astro/pull/3417) [`4de53ecc`](https://github.com/withastro/astro/commit/4de53eccef346bed843b491b7ab93987d7d85655) Thanks [@bholmesdev](https://github.com/bholmesdev)! - Fix: support FormData object on fetch body
+
+* Updated dependencies [[`4de53ecc`](https://github.com/withastro/astro/commit/4de53eccef346bed843b491b7ab93987d7d85655)]:
+  - @astrojs/webapi@0.12.0
+
+## 1.0.0-beta.31
+
+### Patch Changes
+
+- [#3402](https://github.com/withastro/astro/pull/3402) [`0c9f770e`](https://github.com/withastro/astro/commit/0c9f770e8ab361f11549f1e24114e557fdcca65d) Thanks [@matthewp](https://github.com/matthewp)! - Include server CSS in the SSR manifest assets
+
+* [#3406](https://github.com/withastro/astro/pull/3406) [`4007aebc`](https://github.com/withastro/astro/commit/4007aebc6aba8d732abed7c001f59e61678ea3f2) Thanks [@matthewp](https://github.com/matthewp)! - Provides a better error message when using @adobe/react-spectrum
+
+- [#3385](https://github.com/withastro/astro/pull/3385) [`d34859d7`](https://github.com/withastro/astro/commit/d34859d75008812fcd101e197ce835bcc1ee2017) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Expose `file` and `url` properties when fetching `.astro` files with `Astro.glob()`
+
+## 1.0.0-beta.30
+
+### Patch Changes
+
+- [#3392](https://github.com/withastro/astro/pull/3392) [`2939be5f`](https://github.com/withastro/astro/commit/2939be5f2d95711a2a891d77824763c7dbbf10d2) Thanks [@matthewp](https://github.com/matthewp)! - Allows vite config to override options used in the build
+
+* [#3401](https://github.com/withastro/astro/pull/3401) [`0d3c673d`](https://github.com/withastro/astro/commit/0d3c673dd9d9431bf6e6a88c448e324033f7f2f7) Thanks [@tony-sull](https://github.com/tony-sull)! - Adding support for config.build.format to the dev server
+
+- [#3399](https://github.com/withastro/astro/pull/3399) [`1bf12260`](https://github.com/withastro/astro/commit/1bf12260afad57f83768d040fe3917fb214aaf5f) Thanks [@bholmesdev](https://github.com/bholmesdev)! - Update "building for SSR..." log for SSG users to say "building entrypoints for prerendering..."
+
+* [#3391](https://github.com/withastro/astro/pull/3391) [`cf8015ea`](https://github.com/withastro/astro/commit/cf8015eaa2b756f4ec399e8fd7071dee7dfa9ab6) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Fix [#3309](https://github.com/withastro/astro/issues/3309) default logger locale behavior.
+
+## 1.0.0-beta.29
+
+### Patch Changes
+
+- [#3388](https://github.com/withastro/astro/pull/3388) [`4d00473d`](https://github.com/withastro/astro/commit/4d00473dbd20e673b5c9857d500dee072bb20f99) Thanks [@matthewp](https://github.com/matthewp)! - Fixes nested style bug causing initial styles to be off
+
+* [#3379](https://github.com/withastro/astro/pull/3379) [`0259d765`](https://github.com/withastro/astro/commit/0259d7658be82a4a5e09fb703498571d958a0569) Thanks [@matthewp](https://github.com/matthewp)! - Fixes issue with loading md pages in project with a space in folder name
+
+- [#3376](https://github.com/withastro/astro/pull/3376) [`b1230152`](https://github.com/withastro/astro/commit/b1230152ff67ca9c184b24023651f4f8739097b8) Thanks [@matthewp](https://github.com/matthewp)! - Allow using aliases for hydrated scripts
+
+## 1.0.0-beta.28
+
+### Patch Changes
+
+- [#3344](https://github.com/withastro/astro/pull/3344) [`46cd8b9e`](https://github.com/withastro/astro/commit/46cd8b9eb4c5e9b526a6cba288070630b8dcbbf5) Thanks [@matthewp](https://github.com/matthewp)! - Fix for APIRoute type
+
+* [#3350](https://github.com/withastro/astro/pull/3350) [`e48aa2fd`](https://github.com/withastro/astro/commit/e48aa2fd1ee4a3637647990182e1f3aa9384e259) Thanks [@FredKSchott](https://github.com/FredKSchott)! - Improve error hints for packages that should be added to `vite.ssr.noExternal`
+
+- [#3348](https://github.com/withastro/astro/pull/3348) [`43e411ee`](https://github.com/withastro/astro/commit/43e411eed8308015d517de9a0d1e036dc06d34a0) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Update default `vite.optimizeDeps.exclude` to keep `node-fetch` from being optimized
+
+* [#3336](https://github.com/withastro/astro/pull/3336) [`ccea6a0a`](https://github.com/withastro/astro/commit/ccea6a0a1ae55ab057d94f60014e2183013b5f60) Thanks [@matthewp](https://github.com/matthewp)! - Fixes HMR of hoisted script tags
+
+- [#3331](https://github.com/withastro/astro/pull/3331) [`e22f7364`](https://github.com/withastro/astro/commit/e22f7364ceb3e4b057d89bbb32111bcffb7ae967) Thanks [@tony-sull](https://github.com/tony-sull)! - Fixes an issue preventing custom 404 pages in dev
+
+* [#3339](https://github.com/withastro/astro/pull/3339) [`3dc68e14`](https://github.com/withastro/astro/commit/3dc68e148e05a36694cb5759f44cc5349bd66294) Thanks [@thepassle](https://github.com/thepassle)! - fixes injectscript in ssr mode
+
+- [#3332](https://github.com/withastro/astro/pull/3332) [`d04928e8`](https://github.com/withastro/astro/commit/d04928e8f20435cf69d1c171523aa152601cfe21) Thanks [@FredKSchott](https://github.com/FredKSchott)! - Fix an `import from '../core/build/types';` error
+
+* [`f40705d9`](https://github.com/withastro/astro/commit/f40705d906951a2ac16a89290bcadd597fe4cbeb) Thanks [@matthewp](https://github.com/matthewp)! - Fix for swallowed SolidJS errors
+
+- [#3300](https://github.com/withastro/astro/pull/3300) [`b463ddb3`](https://github.com/withastro/astro/commit/b463ddb3ce43641536dee4413ac5bb8ebcbdf608) Thanks [@tony-sull](https://github.com/tony-sull)! - Resolve .astro components by module ID to support the use of Astro + framework components in an NPM package
+
+* [#3352](https://github.com/withastro/astro/pull/3352) [`86855061`](https://github.com/withastro/astro/commit/8685506174962329fb7a76367ea3cf32ea0aa48c) Thanks [@JuanM04](https://github.com/JuanM04)! - Export `ViteUserConfig` type
+
+- [#3337](https://github.com/withastro/astro/pull/3337) [`678c2b75`](https://github.com/withastro/astro/commit/678c2b7523c7f10cfdf2eb5a73aa2bbb7e5cbc07) Thanks [@bholmesdev](https://github.com/bholmesdev)! - Fix: remove hydration failures on React v18 by exposing the "client" directive from Astro core.
+
 ## 1.0.0-beta.27
 
 ### Patch Changes

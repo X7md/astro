@@ -3,6 +3,7 @@ import type http from 'http';
 import type { AstroConfig, ManifestData } from '../@types/astro';
 import type { RenderResponse, SSROptions } from '../core/render/dev/index';
 import { debug, info, warn, error, LogOptions } from '../core/logger/core.js';
+import { appendForwardSlash } from '../core/path.js';
 import { getParamsAndProps, GetParamsAndPropsError } from '../core/render/core.js';
 import { createRouteManifest, matchRoute } from '../core/routing/index.js';
 import stripAnsi from 'strip-ansi';
@@ -33,6 +34,14 @@ function removeViteHttpMiddleware(server: vite.Connect.Server) {
 		if (BAD_VITE_MIDDLEWARE.includes(server.stack[i].handle.name)) {
 			server.stack.splice(i, 1);
 		}
+	}
+}
+
+function truncateString(str: string, n: number) {
+	if (str.length > n) {
+		return str.substring(0, n) + '&#8230;';
+	} else {
+		return str;
 	}
 }
 
@@ -156,17 +165,19 @@ async function handle500Response(
 		statusCode: 500,
 		title: 'Internal Error',
 		tabTitle: '500: Error',
-		message: stripAnsi(err.message),
+		message: stripAnsi(err.hint ?? err.message),
 		url: err.url || undefined,
-		stack: stripAnsi(err.stack),
+		stack: truncateString(stripAnsi(err.stack), 500),
 	});
 	const transformedHtml = await viteServer.transformIndexHtml(pathname, html);
 	writeHtmlResponse(res, 500, transformedHtml);
 }
 
 function getCustom404Route(config: AstroConfig, manifest: ManifestData) {
+	// For Windows compat, use relative page paths to match the 404 route
 	const relPages = resolvePages(config).href.replace(config.root.href, '');
-	return manifest.routes.find((r) => r.component === relPages + '404.astro');
+	const pattern = new RegExp(`${appendForwardSlash(relPages)}404.(astro|md)`);
+	return manifest.routes.find((r) => r.component.match(pattern));
 }
 
 function log404(logging: LogOptions, pathname: string) {
@@ -188,7 +199,10 @@ async function handleRequest(
 	const devRoot = site ? site.pathname : '/';
 	const origin = `${viteServer.config.server.https ? 'https' : 'http'}://${req.headers.host}`;
 	const buildingToSSR = isBuildingToSSR(config);
-	const url = new URL(origin + req.url);
+	// Ignore `.html` extensions and `index.html` in request URLS to ensure that
+	// routing behavior matches production builds. This supports both file and directory
+	// build formats, and is necessary based on how the manifest tracks build targets.
+	const url = new URL(origin + req.url?.replace(/(index)?\.html$/, ''));
 	const pathname = decodeURI(url.pathname);
 	const rootRelativeUrl = pathname.substring(devRoot.length - 1);
 	if (!buildingToSSR) {
@@ -315,7 +329,6 @@ async function handleRequest(
 			return await writeSSRResult(result, res, statusCode);
 		}
 	} catch (_err) {
-		debugger;
 		const err = fixViteErrorMessage(createSafeError(_err), viteServer);
 		error(logging, null, msg.formatErrorMessage(err));
 		handle500Response(viteServer, origin, req, res, err);

@@ -14,6 +14,7 @@ import ancestor from 'common-ancestor-path';
 import { trackCSSDependencies, handleHotUpdate } from './hmr.js';
 import { isRelativePath, startsWithForwardSlash } from '../core/path.js';
 import { PAGE_SCRIPT_ID, PAGE_SSR_SCRIPT_ID } from '../vite-plugin-scripts/index.js';
+import { getFileInfo } from '../vite-plugin-utils/index.js';
 import { resolvePages } from '../core/util.js';
 
 const FRONTMATTER_PARSE_REGEXP = /^\-\-\-(.*)^\-\-\-/ms;
@@ -61,8 +62,9 @@ export default function astro({ config, logging }: AstroPluginOptions): vite.Plu
 			// If resolving from an astro subresource such as a hoisted script,
 			// we need to resolve relative paths ourselves.
 			if (from) {
-				const { query: fromQuery, filename } = parseAstroRequest(from);
-				if (fromQuery.astro && isRelativePath(id) && fromQuery.type === 'script') {
+				const parsedFrom = parseAstroRequest(from);
+				if (parsedFrom.query.astro && isRelativePath(id) && parsedFrom.query.type === 'script') {
+					const filename = normalizeFilename(parsedFrom.filename);
 					const resolvedURL = new URL(id, `file://${filename}`);
 					const resolved = resolvedURL.pathname;
 					if (isBrowserPath(resolved)) {
@@ -99,15 +101,21 @@ export default function astro({ config, logging }: AstroPluginOptions): vite.Plu
 			if (isPage && config._ctx.scripts.some((s) => s.stage === 'page')) {
 				source += `\n<script src="${PAGE_SCRIPT_ID}" />`;
 			}
+			const compileProps = {
+				config,
+				filename,
+				moduleId: id,
+				source,
+				ssr: Boolean(opts?.ssr),
+				viteTransform,
+			};
 			if (query.astro) {
 				if (query.type === 'style') {
 					if (typeof query.index === 'undefined') {
 						throw new Error(`Requests for Astro CSS must include an index.`);
 					}
 
-					const transformResult = await cachedCompilation(config, filename, source, viteTransform, {
-						ssr: Boolean(opts?.ssr),
-					});
+					const transformResult = await cachedCompilation(compileProps);
 
 					// Track any CSS dependencies so that HMR is triggered when they change.
 					await trackCSSDependencies.call(this, {
@@ -126,10 +134,14 @@ export default function astro({ config, logging }: AstroPluginOptions): vite.Plu
 					if (typeof query.index === 'undefined') {
 						throw new Error(`Requests for hoisted scripts must include an index`);
 					}
+					// HMR hoisted script only exists to make them appear in the module graph.
+					if (opts?.ssr) {
+						return {
+							code: `/* client hoisted script, empty in SSR: ${id} */`,
+						};
+					}
 
-					const transformResult = await cachedCompilation(config, filename, source, viteTransform, {
-						ssr: Boolean(opts?.ssr),
-					});
+					const transformResult = await cachedCompilation(compileProps);
 					const scripts = transformResult.scripts;
 					const hoistedScript = scripts[query.index];
 
@@ -157,9 +169,8 @@ export default function astro({ config, logging }: AstroPluginOptions): vite.Plu
 			}
 
 			try {
-				const transformResult = await cachedCompilation(config, filename, source, viteTransform, {
-					ssr: Boolean(opts?.ssr),
-				});
+				const transformResult = await cachedCompilation(compileProps);
+				const { fileId: file, fileUrl: url } = getFileInfo(id, config);
 
 				// Compile all TypeScript to JavaScript.
 				// Also, catches invalid JS/TS in the compiled output before returning.
@@ -172,6 +183,9 @@ export default function astro({ config, logging }: AstroPluginOptions): vite.Plu
 				});
 
 				let SUFFIX = '';
+				SUFFIX += `\nconst $$file = ${JSON.stringify(file)};\nconst $$url = ${JSON.stringify(
+					url
+				)};export { $$file as file, $$url as url };\n`;
 				// Add HMR handling in dev mode.
 				if (!resolvedConfig.isProduction) {
 					// HACK: extract dependencies from metadata until compiler static extraction handles them
@@ -182,9 +196,14 @@ export default function astro({ config, logging }: AstroPluginOptions): vite.Plu
 					while ((match = pattern.exec(metadata)?.[1])) {
 						deps.add(match);
 					}
-					// // import.meta.hot.accept(["${id}", "${Array.from(deps).join('","')}"], (...mods) => mods);
-					// We need to be self-accepting, AND
-					// we need an explicity array of deps to track changes for SSR-only components
+
+					let i = 0;
+					while (i < transformResult.scripts.length) {
+						deps.add(`${id}?astro&type=script&index=${i}`);
+						SUFFIX += `import "${id}?astro&type=script&index=${i}";`;
+						i++;
+					}
+
 					SUFFIX += `\nif (import.meta.hot) {
 						import.meta.hot.accept(mod => mod);
 					}`;
@@ -193,6 +212,7 @@ export default function astro({ config, logging }: AstroPluginOptions): vite.Plu
 				if (isPage) {
 					SUFFIX += `\nimport "${PAGE_SSR_SCRIPT_ID}";`;
 				}
+
 				return {
 					code: `${code}${SUFFIX}`,
 					map,
@@ -232,19 +252,17 @@ export default function astro({ config, logging }: AstroPluginOptions): vite.Plu
 					const search = new URLSearchParams({
 						labels: 'compiler',
 						title: '🐛 BUG: `@astrojs/compiler` panic',
-						body: `### Describe the Bug
-    
-    \`@astrojs/compiler\` encountered an unrecoverable error when compiling the following file.
-    
-    **${id.replace(fileURLToPath(config.root), '')}**
-    \`\`\`astro
-    ${source}
-    \`\`\`
-    `,
+						template: '---01-bug-report.yml',
+						'bug-description': `\`@astrojs/compiler\` encountered an unrecoverable error when compiling the following file.
+
+**${id.replace(fileURLToPath(config.root), '')}**
+\`\`\`astro
+${source}
+\`\`\``,
 					});
 					err.url = `https://github.com/withastro/astro/issues/new?${search.toString()}`;
 					err.message = `Error: Uh oh, the Astro compiler encountered an unrecoverable error!
-    
+
     Please open
     a GitHub issue using the link below:
     ${err.url}`;
@@ -260,7 +278,7 @@ export default function astro({ config, logging }: AstroPluginOptions): vite.Plu
 		},
 		async handleHotUpdate(context) {
 			if (context.server.config.isProduction) return;
-			return handleHotUpdate(context, config, logging);
+			return handleHotUpdate.call(this, context, config, logging);
 		},
 	};
 }

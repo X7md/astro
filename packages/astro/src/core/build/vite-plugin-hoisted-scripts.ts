@@ -5,7 +5,7 @@ import { viteID } from '../util.js';
 import { getPageDataByViteID } from './internal.js';
 
 function virtualHoistedEntry(id: string) {
-	return id.endsWith('.astro/hoisted.js') || id.endsWith('.md/hoisted.js');
+	return id.startsWith('/astro/hoisted.js?q=');
 }
 
 export function vitePluginHoistedScripts(
@@ -25,7 +25,12 @@ export function vitePluginHoistedScripts(
 			if (virtualHoistedEntry(id)) {
 				let code = '';
 				for (let path of internals.hoistedScriptIdToHoistedMap.get(id)!) {
-					code += `import "${path}";`;
+					let importPath = path;
+					// `/@fs` is added during the compiler's transform() step
+					if (importPath.startsWith('/@fs')) {
+						importPath = importPath.slice('/@fs'.length);
+					}
+					code += `import "${importPath}";`;
 				}
 				return {
 					code,
@@ -44,12 +49,13 @@ export function vitePluginHoistedScripts(
 					virtualHoistedEntry(output.facadeModuleId)
 				) {
 					const facadeId = output.facadeModuleId!;
-					const pathname = facadeId.slice(0, facadeId.length - '/hoisted.js'.length);
-
-					const vid = viteID(new URL('.' + pathname, astroConfig.root));
-					const pageInfo = getPageDataByViteID(internals, vid);
-					if (pageInfo) {
-						pageInfo.hoistedScript = id;
+					const pages = internals.hoistedScriptIdToPagesMap.get(facadeId)!;
+					for (const pathname of pages) {
+						const vid = viteID(new URL('.' + pathname, astroConfig.root));
+						const pageInfo = getPageDataByViteID(internals, vid);
+						if (pageInfo) {
+							pageInfo.hoistedScript = id;
+						}
 					}
 				}
 			}

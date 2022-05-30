@@ -201,11 +201,20 @@ Did you mean to add ${formatList(probableRendererNames.map((r) => '`' + r + '`')
 	// Call the renderers `check` hook to see if any claim this component.
 	let renderer: SSRLoadedRenderer | undefined;
 	if (metadata.hydrate !== 'only') {
+		let error;
 		for (const r of renderers) {
-			if (await r.ssr.check(Component, props, children)) {
-				renderer = r;
-				break;
+			try {
+				if (await r.ssr.check(Component, props, children)) {
+					renderer = r;
+					break;
+				}
+			} catch (e) {
+				error ??= e;
 			}
+		}
+
+		if (error) {
+			throw error;
 		}
 
 		if (!renderer && typeof HTMLElement === 'function' && componentIsHTMLElement(Component)) {
@@ -288,7 +297,7 @@ If you're still stuck, please open an issue on GitHub or join us at https://astr
 	// as a string and the user is responsible for adding a script tag for the component definition.
 	if (!html && typeof Component === 'string') {
 		html = await renderAstroComponent(
-			await render`<${Component}${spreadAttributes(props)}${markHTMLString(
+			await render`<${Component}${internalSpreadAttributes(props)}${markHTMLString(
 				(children == null || children == '') && voidElementNames.test(Component)
 					? `/>`
 					: `>${children == null ? '' : children}</${Component}>`
@@ -417,10 +426,33 @@ Make sure to use the static attribute syntax (\`${key}={value}\`) instead of the
 }
 
 // Adds support for `<Component {...value} />
-export function spreadAttributes(values: Record<any, any>, shouldEscape = true) {
+function internalSpreadAttributes(values: Record<any, any>, shouldEscape = true) {
 	let output = '';
 	for (const [key, value] of Object.entries(values)) {
 		output += addAttribute(value, key, shouldEscape);
+	}
+	return markHTMLString(output);
+}
+
+// Adds support for `<Component {...value} />
+export function spreadAttributes(
+	values: Record<any, any>,
+	name: string,
+	{ class: scopedClassName }: { class?: string } = {}
+) {
+	let output = '';
+	// If the compiler passes along a scoped class, merge with existing props or inject it
+	if (scopedClassName) {
+		if (typeof values.class !== 'undefined') {
+			values.class += ` ${scopedClassName}`;
+		} else if (typeof values['class:list'] !== 'undefined') {
+			values['class:list'] = [values['class:list'], scopedClassName];
+		} else {
+			values.class = scopedClassName;
+		}
+	}
+	for (const [key, value] of Object.entries(values)) {
+		output += addAttribute(value, key, true);
 	}
 	return markHTMLString(output);
 }
@@ -508,7 +540,7 @@ Update your code to remove this warning.`);
 		},
 	}) as APIContext & Params;
 
-	return await handler.call(mod, proxy, request);
+	return handler.call(mod, proxy, request);
 }
 
 async function replaceHeadInjection(result: SSRResult, html: string): Promise<string> {
@@ -535,7 +567,7 @@ export async function renderToString(
 	}
 
 	let template = await renderAstroComponent(Component);
-	return replaceHeadInjection(result, template);
+	return template;
 }
 
 export async function renderPage(
@@ -594,10 +626,7 @@ export async function renderHead(result: SSRResult): Promise<string> {
 			if ('data-astro-component-hydration' in script.props) {
 				needsHydrationStyles = true;
 			}
-			return renderElement('script', {
-				...script,
-				props: { ...script.props, 'astro-script': result._metadata.pathname + '/script-' + i },
-			});
+			return renderElement('script', script);
 		});
 	if (needsHydrationStyles) {
 		styles.push(
@@ -686,5 +715,5 @@ function renderElement(
 			children = defineScriptVars(defineVars) + '\n' + children;
 		}
 	}
-	return `<${name}${spreadAttributes(props, shouldEscape)}>${children}</${name}>`;
+	return `<${name}${internalSpreadAttributes(props, shouldEscape)}>${children}</${name}>`;
 }

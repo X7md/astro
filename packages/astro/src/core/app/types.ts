@@ -12,7 +12,7 @@ export interface RouteInfo {
 	routeData: RouteData;
 	file: string;
 	links: string[];
-	scripts: string[];
+	scripts: Array<string | { children: string; stage: string }>;
 }
 
 export type SerializedRouteInfo = Omit<RouteInfo, 'routeData'> & {
@@ -22,6 +22,7 @@ export type SerializedRouteInfo = Omit<RouteInfo, 'routeData'> & {
 export interface SSRManifest {
 	routes: RouteInfo[];
 	site?: string;
+	base?: string;
 	markdown: MarkdownRenderingOptions;
 	pageMap: Map<ComponentPath, ComponentInstance>;
 	renderers: SSRLoadedRenderer[];

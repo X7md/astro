@@ -18,7 +18,7 @@ import {
 	createLinkStylesheetElementSet,
 	createModuleScriptElementWithSrcSet,
 } from '../render/ssr-element.js';
-import { prependForwardSlash } from '../path.js';
+import { joinPaths, prependForwardSlash } from '../path.js';
 
 export const pagesVirtualModuleId = '@astrojs-pages-virtual-entry';
 export const resolvedPagesVirtualModuleId = '\0' + pagesVirtualModuleId;
@@ -78,7 +78,21 @@ export class App {
 		const renderers = manifest.renderers;
 		const info = this.#routeDataToRouteInfo.get(routeData!)!;
 		const links = createLinkStylesheetElementSet(info.links, manifest.site);
-		const scripts = createModuleScriptElementWithSrcSet(info.scripts, manifest.site);
+
+		const filteredScripts = info.scripts.filter(
+			(script) => typeof script !== 'string' && script?.stage !== 'head-inline'
+		) as string[];
+		const scripts = createModuleScriptElementWithSrcSet(filteredScripts, manifest.site);
+
+		// Add all injected scripts to the page.
+		for (const script of info.scripts) {
+			if (typeof script !== 'string' && script.stage === 'head-inline') {
+				scripts.add({
+					props: {},
+					children: script.children,
+				});
+			}
+		}
 
 		const result = await render({
 			links,
@@ -94,7 +108,9 @@ export class App {
 					throw new Error(`Unable to resolve [${specifier}]`);
 				}
 				const bundlePath = manifest.entryModules[specifier];
-				return bundlePath.startsWith('data:') ? bundlePath : prependForwardSlash(bundlePath);
+				return bundlePath.startsWith('data:')
+					? bundlePath
+					: prependForwardSlash(joinPaths(manifest.base, bundlePath));
 			},
 			route: routeData,
 			routeCache: this.#routeCache,

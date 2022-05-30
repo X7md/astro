@@ -1,5 +1,5 @@
 import { fileURLToPath } from 'url';
-import type * as vite from 'vite';
+import type { HtmlTagDescriptor, ViteDevServer } from 'vite';
 import type {
 	AstroConfig,
 	AstroRenderer,
@@ -15,9 +15,9 @@ import { prependForwardSlash } from '../../../core/path.js';
 import { RouteCache } from '../route-cache.js';
 import { createModuleScriptElementWithSrcSet } from '../ssr-element.js';
 import { getStylesForURL } from './css.js';
-import { getHmrScript } from './hmr.js';
 import { injectTags } from './html.js';
 import { isBuildingToSSR } from '../../util.js';
+import { collectMdMetadata } from '../util.js';
 
 export interface SSROptions {
 	/** an instance of the AstroConfig */
@@ -37,7 +37,7 @@ export interface SSROptions {
 	/** pass in route cache because SSR can’t manage cache-busting */
 	routeCache: RouteCache;
 	/** Vite instance */
-	viteServer: vite.ViteDevServer;
+	viteServer: ViteDevServer;
 	/** Request */
 	request: Request;
 }
@@ -51,7 +51,7 @@ export type RenderResponse =
 const svelteStylesRE = /svelte\?svelte&type=style/;
 
 async function loadRenderer(
-	viteServer: vite.ViteDevServer,
+	viteServer: ViteDevServer,
 	renderer: AstroRenderer
 ): Promise<SSRLoadedRenderer> {
 	// Vite modules can be out-of-date when using an un-resolved url
@@ -65,7 +65,7 @@ async function loadRenderer(
 }
 
 export async function loadRenderers(
-	viteServer: vite.ViteDevServer,
+	viteServer: ViteDevServer,
 	astroConfig: AstroConfig
 ): Promise<SSRLoadedRenderer[]> {
 	return Promise.all(astroConfig._ctx.renderers.map((r) => loadRenderer(viteServer, r)));
@@ -80,6 +80,15 @@ export async function preload({
 	const renderers = await loadRenderers(viteServer, astroConfig);
 	// Load the module from the Vite SSR Runtime.
 	const mod = (await viteServer.ssrLoadModule(fileURLToPath(filePath))) as ComponentInstance;
+	if (viteServer.config.mode === 'development' || !mod?.$$metadata) {
+		return [renderers, mod];
+	}
+
+	// append all nested markdown metadata to mod.$$metadata
+	const modGraph = await viteServer.moduleGraph.getModuleByUrl(fileURLToPath(filePath));
+	if (modGraph) {
+		await collectMdMetadata(mod.$$metadata, modGraph, viteServer);
+	}
 
 	return [renderers, mod];
 }
@@ -160,18 +169,11 @@ export async function render(
 		pathname,
 		scripts,
 		// Resolves specifiers in the inline hydrated scripts, such as "@astrojs/preact/client.js"
-		// TODO: Can we pass the hydration code more directly through Vite, so that we
-		// don't need to copy-paste and maintain Vite's import resolution here?
 		async resolve(s: string) {
-			const [resolvedUrl, resolvedPath] = await viteServer.moduleGraph.resolveUrl(s);
-			if (resolvedPath.includes('node_modules/.vite')) {
-				return resolvedPath.replace(/.*?node_modules\/\.vite/, '/node_modules/.vite');
+			if (s.startsWith('/@fs')) {
+				return s;
 			}
-			// NOTE: This matches the same logic that Vite uses to add the `/@id/` prefix.
-			if (!resolvedUrl.startsWith('.') && !resolvedUrl.startsWith('/')) {
-				return '/@id' + prependForwardSlash(resolvedUrl);
-			}
-			return '/@fs' + prependForwardSlash(resolvedPath);
+			return '/@id' + prependForwardSlash(s);
 		},
 		renderers,
 		request,
@@ -186,7 +188,7 @@ export async function render(
 	}
 
 	// inject tags
-	const tags: vite.HtmlTagDescriptor[] = [];
+	const tags: HtmlTagDescriptor[] = [];
 
 	// add injected tags
 	let html = injectTags(content.html, tags);

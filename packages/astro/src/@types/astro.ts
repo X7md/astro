@@ -216,7 +216,7 @@ export interface AstroGlobalPartial {
 	 *
 	 * [Astro reference](https://docs.astro.build/en/reference/api-reference/#astroglob)
 	 */
-	glob(globStr: `${any}.astro`): Promise<ComponentInstance[]>;
+	glob(globStr: `${any}.astro`): Promise<AstroInstance[]>;
 	glob<T extends Record<string, any>>(globStr: `${any}.md`): Promise<MarkdownInstance<T>[]>;
 	glob<T extends Record<string, any>>(globStr: string): Promise<T[]>;
 	/**
@@ -254,6 +254,10 @@ type ServerConfig = {
 	 */
 	port?: number;
 };
+
+export interface ViteUserConfig extends vite.UserConfig {
+	ssr?: vite.SSROptions;
+}
 
 /**
  * Astro User Config
@@ -376,7 +380,7 @@ export interface AstroUserConfig {
 	 * @docs
 	 * @name trailingSlash
 	 * @type {('always' | 'never' | 'ignore')}
-	 * @default `'always'`
+	 * @default `'ignore'`
 	 * @see buildOptions.pageUrlFormat
 	 * @description
 	 *
@@ -511,16 +515,6 @@ export interface AstroUserConfig {
 
 		/**
 		 * @docs
-		 * @name markdown.mode
-		 * @type {'md' | 'mdx'}
-		 * @default `mdx`
-		 * @description
-		 * Control wheater to allow components inside markdown files ('mdx') or not ('md').
-		 */
-		mode?: 'md' | 'mdx';
-
-		/**
-		 * @docs
 		 * @name markdown.shikiConfig
 		 * @typeraw {Partial<ShikiConfig>}
 		 * @description
@@ -563,7 +557,7 @@ export interface AstroUserConfig {
 		 * {
 		 *   markdown: {
 		 *     // Example: The default set of remark plugins used by Astro
-		 *     remarkPlugins: ['remark-code-titles', ['rehype-autolink-headings', { behavior: 'prepend' }]],
+		 *     remarkPlugins: ['remark-gfm', 'remark-smartypants'],
 		 *   },
 		 * };
 		 * ```
@@ -582,7 +576,7 @@ export interface AstroUserConfig {
 		 * {
 		 *   markdown: {
 		 *     // Example: The default set of rehype plugins used by Astro
-		 *     rehypePlugins: ['rehype-slug', ['rehype-toc', { headings: ['h2', 'h3'] }], [addClasses, { 'h1,h2,h3': 'title' }]],
+		 *     rehypePlugins: [],
 		 *   },
 		 * };
 		 * ```
@@ -652,7 +646,7 @@ export interface AstroUserConfig {
 	 * }
 	 * ```
 	 */
-	vite?: vite.UserConfig & { ssr?: vite.SSROptions };
+	vite?: ViteUserConfig;
 
 	experimental?: {
 		/**
@@ -748,11 +742,21 @@ export interface ComponentInstance {
 	getStaticPaths?: (options: GetStaticPathsOptions) => GetStaticPathsResult;
 }
 
+export interface AstroInstance {
+	file: string;
+	url: string | undefined;
+	default: AstroComponentFactory;
+}
+
 export interface MarkdownInstance<T extends Record<string, any>> {
 	frontmatter: T;
 	file: string;
 	url: string | undefined;
 	Content: AstroComponentFactory;
+	/** raw Markdown file content, excluding frontmatter */
+	rawContent(): string;
+	/** Markdown file compiled to valid Astro syntax. Queryable with most HTML parsing libraries */
+	compiledContent(): Promise<string>;
 	getHeaders(): Promise<MarkdownHeader[]>;
 	default: () => Promise<{
 		metadata: MarkdownMetadata;
@@ -770,8 +774,8 @@ export type GetHydrateCallback = () => Promise<
  * getStaticPaths() options
  * Docs: https://docs.astro.build/reference/api-reference/#getstaticpaths
  */ export interface GetStaticPathsOptions {
-	paginate?: PaginateFunction;
-	rss?: (...args: any[]) => any;
+	paginate: PaginateFunction;
+	rss: (...args: any[]) => any;
 }
 
 export type GetStaticPathsItem = { params: Params; props?: Props };
@@ -883,18 +887,10 @@ export interface EndpointOutput<Output extends Body = Body> {
 	body: Output;
 }
 
-interface APIRoute {
-	(context: APIContext): EndpointOutput | Response;
-
-	/**
-	 * @deprecated
-	 * Use { context: APIRouteContext } object instead.
-	 */
-	(params: Params, request: Request): EndpointOutput | Response;
-}
+export type APIRoute = (context: APIContext) => EndpointOutput | Response;
 
 export interface EndpointHandler {
-	[method: string]: APIRoute;
+	[method: string]: APIRoute | ((params: Params, request: Request) => EndpointOutput | Response);
 }
 
 export interface AstroRenderer {
@@ -948,6 +944,7 @@ export interface AstroIntegration {
 			vite: ViteConfigWithSSR;
 			pages: Map<string, PageBuildData>;
 			target: 'client' | 'server';
+			updateConfig: (newConfig: ViteConfigWithSSR) => void;
 		}) => void | Promise<void>;
 		'astro:build:done'?: (options: {
 			pages: { pathname: string }[];
@@ -970,6 +967,8 @@ export interface RouteData {
 	generate: (data?: any) => string;
 	params: string[];
 	pathname?: string;
+	// expose the real path name on SSG
+	distURL?: URL;
 	pattern: RegExp;
 	segments: RoutePart[][];
 	type: RouteType;
@@ -978,6 +977,9 @@ export interface RouteData {
 export type SerializedRouteData = Omit<RouteData, 'generate' | 'pattern'> & {
 	generate: undefined;
 	pattern: string;
+	_meta: {
+		trailingSlash: AstroConfig['trailingSlash'];
+	};
 };
 
 export type RuntimeMode = 'development' | 'production';
