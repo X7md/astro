@@ -86,11 +86,11 @@ export default function markdown({ config }: AstroPluginOptions): Plugin {
 				return {
 					code: `
 						// Static
-						export const frontmatter = ${JSON.stringify(frontmatter)};
+						export const frontmatter = ${escapeViteEnvReferences(JSON.stringify(frontmatter))};
 						export const file = ${JSON.stringify(fileId)};
 						export const url = ${JSON.stringify(fileUrl)};
 						export function rawContent() {
-							return ${JSON.stringify(rawContent)};
+							return ${escapeViteEnvReferences(JSON.stringify(rawContent))};
 						}
 						export async function compiledContent() {
 							return load().then((m) => m.compiledContent());
@@ -129,10 +129,11 @@ export default function markdown({ config }: AstroPluginOptions): Plugin {
 				// Extract special frontmatter keys
 				let { data: frontmatter, content: markdownContent } = matter(source);
 
-				// Turn HTML comments into JS comments
+				// Turn HTML comments into JS comments while preventing nested `*/` sequences
+				// from ending the JS comment by injecting a zero-width space
 				markdownContent = markdownContent.replace(
 					/<\s*!--([^-->]*)(.*?)-->/gs,
-					(whole) => `{/*${whole}*/}`
+					(whole) => `{/*${whole.replace(/\*\//g, '*\u200b/')}*/}`
 				);
 
 				let renderResult = await renderMarkdown(markdownContent, {
@@ -191,7 +192,7 @@ ${tsResult}`;
 					sourcefile: id,
 				});
 				return {
-					code,
+					code: escapeViteEnvReferences(code),
 					map: null,
 				};
 			}
@@ -199,4 +200,11 @@ ${tsResult}`;
 			return null;
 		},
 	};
+}
+
+// Converts the first dot in `import.meta.env.` to its Unicode escape sequence,
+// which prevents Vite from replacing strings like `import.meta.env.SITE`
+// in our JS representation of loaded Markdown files
+function escapeViteEnvReferences(code: string) {
+	return code.replace(/import\.meta\.env\./g, 'import\\u002Emeta.env.');
 }
