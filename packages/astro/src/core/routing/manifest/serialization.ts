@@ -1,4 +1,4 @@
-import type { RouteData, SerializedRouteData, AstroConfig } from '../../../@types/astro';
+import type { AstroConfig, RouteData, SerializedRouteData } from '../../../@types/astro';
 
 import { getRouteGenerator } from './generator.js';
 
@@ -16,6 +16,7 @@ export function serializeRouteData(
 
 export function deserializeRouteData(rawRouteData: SerializedRouteData): RouteData {
 	return {
+		route: rawRouteData.route,
 		type: rawRouteData.type,
 		pattern: new RegExp(rawRouteData.pattern),
 		params: rawRouteData.params,
