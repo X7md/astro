@@ -5,9 +5,10 @@ import type { BuildInternals } from './internal.js';
 import type { StaticBuildOptions } from './types';
 
 import glob from 'fast-glob';
+import * as fs from 'fs';
 import { fileURLToPath } from 'url';
 import { runHookBuildSsr } from '../../integrations/index.js';
-import { BEFORE_HYDRATION_SCRIPT_ID } from '../../vite-plugin-scripts/index.js';
+import { BEFORE_HYDRATION_SCRIPT_ID, PAGE_SCRIPT_ID } from '../../vite-plugin-scripts/index.js';
 import { pagesVirtualModuleId } from '../app/index.js';
 import { serializeRouteData } from '../routing/index.js';
 import { addRollupInput } from './add-rollup-input.js';
@@ -18,11 +19,7 @@ const resolvedVirtualModuleId = '\0' + virtualModuleId;
 const manifestReplace = '@@ASTRO_MANIFEST_REPLACE@@';
 const replaceExp = new RegExp(`['"](${manifestReplace})['"]`, 'g');
 
-export function vitePluginSSR(
-	buildOpts: StaticBuildOptions,
-	internals: BuildInternals,
-	adapter: AstroAdapter
-): VitePlugin {
+export function vitePluginSSR(internals: BuildInternals, adapter: AstroAdapter): VitePlugin {
 	return {
 		name: '@astrojs/vite-plugin-astro-ssr',
 		enforce: 'post',
@@ -69,35 +66,53 @@ if(_start in adapter) {
 			return void 0;
 		},
 		async generateBundle(_opts, bundle) {
-			const staticFiles = new Set(
-				await glob('**/*', {
-					cwd: fileURLToPath(buildOpts.buildConfig.client),
-				})
-			);
-
 			// Add assets from this SSR chunk as well.
 			for (const [_chunkName, chunk] of Object.entries(bundle)) {
 				if (chunk.type === 'asset') {
-					staticFiles.add(chunk.fileName);
+					internals.staticFiles.add(chunk.fileName);
 				}
 			}
 
-			const manifest = buildManifest(buildOpts, internals, Array.from(staticFiles));
-			await runHookBuildSsr({ config: buildOpts.astroConfig, manifest });
-
-			for (const [_chunkName, chunk] of Object.entries(bundle)) {
+			for (const [chunkName, chunk] of Object.entries(bundle)) {
 				if (chunk.type === 'asset') {
 					continue;
 				}
 				if (chunk.modules[resolvedVirtualModuleId]) {
-					const code = chunk.code;
-					chunk.code = code.replace(replaceExp, () => {
-						return JSON.stringify(manifest);
-					});
+					internals.ssrEntryChunk = chunk;
+					delete bundle[chunkName];
 				}
 			}
 		},
 	};
+}
+
+export async function injectManifest(buildOpts: StaticBuildOptions, internals: BuildInternals) {
+	if (!internals.ssrEntryChunk) {
+		throw new Error(`Did not generate an entry chunk for SSR`);
+	}
+
+	// Add assets from the client build.
+	const clientStatics = new Set(
+		await glob('**/*', {
+			cwd: fileURLToPath(buildOpts.buildConfig.client),
+		})
+	);
+	for (const file of clientStatics) {
+		internals.staticFiles.add(file);
+	}
+
+	const staticFiles = internals.staticFiles;
+	const manifest = buildManifest(buildOpts, internals, Array.from(staticFiles));
+	await runHookBuildSsr({ config: buildOpts.astroConfig, manifest });
+
+	const chunk = internals.ssrEntryChunk;
+	const code = chunk.code;
+	chunk.code = code.replace(replaceExp, () => {
+		return JSON.stringify(manifest);
+	});
+	const serverEntryURL = new URL(buildOpts.buildConfig.serverEntry, buildOpts.buildConfig.server);
+	await fs.promises.mkdir(new URL('./', serverEntryURL), { recursive: true });
+	await fs.promises.writeFile(serverEntryURL, chunk.code, 'utf-8');
 }
 
 function buildManifest(
@@ -108,16 +123,23 @@ function buildManifest(
 	const { astroConfig } = opts;
 
 	const routes: SerializedRouteInfo[] = [];
+	const entryModules = Object.fromEntries(internals.entrySpecifierToBundleMap.entries());
+	if (astroConfig._ctx.scripts.some((script) => script.stage === 'page')) {
+		staticFiles.push(entryModules[PAGE_SCRIPT_ID]);
+	}
 
 	for (const pageData of eachPageData(internals)) {
-		const scripts = Array.from(pageData.scripts);
+		const scripts: SerializedRouteInfo['scripts'] = [];
 		if (pageData.hoistedScript) {
 			scripts.unshift(pageData.hoistedScript);
+		}
+		if (astroConfig._ctx.scripts.some((script) => script.stage === 'page')) {
+			scripts.push({ type: 'external', value: entryModules[PAGE_SCRIPT_ID] });
 		}
 
 		routes.push({
 			file: '',
-			links: Array.from(pageData.css),
+			links: Array.from(pageData.css).reverse(),
 			scripts: [
 				...scripts,
 				...astroConfig._ctx.scripts
@@ -129,15 +151,20 @@ function buildManifest(
 	}
 
 	// HACK! Patch this special one.
-	const entryModules = Object.fromEntries(internals.entrySpecifierToBundleMap.entries());
-	entryModules[BEFORE_HYDRATION_SCRIPT_ID] =
-		'data:text/javascript;charset=utf-8,//[no before-hydration script]';
+	if (!(BEFORE_HYDRATION_SCRIPT_ID in entryModules)) {
+		entryModules[BEFORE_HYDRATION_SCRIPT_ID] =
+			'data:text/javascript;charset=utf-8,//[no before-hydration script]';
+	}
 
 	const ssrManifest: SerializedSSRManifest = {
+		adapterName: opts.astroConfig._ctx.adapter!.name,
 		routes,
 		site: astroConfig.site,
 		base: astroConfig.base,
-		markdown: astroConfig.markdown,
+		markdown: {
+			...astroConfig.markdown,
+			isAstroFlavoredMd: astroConfig.legacy.astroFlavoredMarkdown,
+		},
 		pageMap: null as any,
 		renderers: [],
 		entryModules,

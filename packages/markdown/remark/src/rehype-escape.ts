@@ -1,4 +1,8 @@
-import { visit } from 'unist-util-visit';
+import { SKIP, visit } from 'unist-util-visit';
+
+export function escapeEntities(value: string): string {
+	return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
 
 export default function rehypeEscape(): any {
 	return function (node: any): any {
@@ -8,10 +12,11 @@ export default function rehypeEscape(): any {
 				// Visit all raw children and escape HTML tags to prevent Markdown code
 				// like "This is a `<script>` tag" from actually opening a script tag
 				visit(el, 'raw', (raw) => {
-					raw.value = raw.value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+					raw.value = escapeEntities(raw.value);
 				});
+				// Do not visit children to prevent double escaping
+				return SKIP;
 			}
-			return el;
 		});
 	};
 }

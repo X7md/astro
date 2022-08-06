@@ -1,13 +1,8 @@
-import { test as base, expect } from '@playwright/test';
-import { loadFixture } from './test-utils.js';
+import { expect } from '@playwright/test';
+import { testFactory, getErrorOverlayMessage } from './test-utils.js';
 
-export function prepareTestFactory({ root }) {
-	const test = base.extend({
-		astro: async ({}, use) => {
-			const fixture = await loadFixture({ root });
-			await use(fixture);
-		},
-	});
+export function prepareTestFactory(opts) {
+	const test = testFactory(opts);
 
 	let devServer;
 
@@ -122,7 +117,7 @@ export function prepareTestFactory({ root }) {
 				original.replace('id="client-idle" {...someProps}', 'id="client-idle" count={5}')
 			);
 
-			await expect(count, 'count prop updated').toHaveText('5');
+			await expect(count, 'count prop updated').toHaveText('5', { timeout: 10000 });
 			await expect(counter, 'component styles persisted').toHaveCSS('display', 'grid');
 
 			// Edit the client:only component's slot text

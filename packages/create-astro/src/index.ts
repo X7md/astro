@@ -1,15 +1,27 @@
+/* eslint no-console: 'off' */
 import degit from 'degit';
 import { execa, execaCommand } from 'execa';
 import fs from 'fs';
-import { bgCyan, black, bold, cyan, gray, green, red, yellow } from 'kleur/colors';
+import { bgCyan, black, bold, cyan, dim, gray, green, red, reset, yellow } from 'kleur/colors';
 import ora from 'ora';
+import os from 'os';
 import path from 'path';
 import prompts from 'prompts';
+import url from 'url';
+import detectPackageManager from 'which-pm-runs';
 import yargs from 'yargs-parser';
 import { loadWithRocketGradient, rocketAscii } from './gradient.js';
 import { defaultLogLevel, logger } from './logger.js';
 import { TEMPLATES } from './templates.js';
 
+function wait(ms: number) {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function logAndWait(message: string, ms = 100) {
+	console.log(message);
+	return wait(ms);
+}
 // NOTE: In the v7.x version of npm, the default behavior of `npm init` was changed
 // to no longer require `--` to pass args and instead pass `--` directly to us. This
 // broke our arg parser, since `--` is a special kind of flag. Filtering for `--` here
@@ -37,11 +49,13 @@ const { version } = JSON.parse(
 
 const FILES_TO_REMOVE = ['.stackblitzrc', 'sandbox.config.json', 'CHANGELOG.md']; // some files are only needed for online editors when using astro.new. Remove for create-astro installs.
 
+// Please also update the installation instructions in the docs at https://github.com/withastro/docs/blob/main/src/pages/en/install/auto.md if you make any changes to the flow or wording here.
 export async function main() {
-	const pkgManager = pkgManagerFromUserAgent(process.env.npm_config_user_agent);
+	const pkgManager = detectPackageManager()?.name || 'npm';
 
 	logger.debug('Verbose logging turned on');
 	console.log(`\n${bold('Welcome to Astro!')} ${gray(`(create-astro v${version})`)}`);
+	console.log(`Lets walk through setting up your new Astro project.\n`);
 
 	let cwd = args['_'][2] as string;
 
@@ -60,18 +74,21 @@ export async function main() {
 			let rejectProjectDir = ora({ color: 'red', text: notEmptyMsg(cwd) });
 			rejectProjectDir.fail();
 		}
-		const dirResponse = await prompts({
-			type: 'text',
-			name: 'directory',
-			message: 'Where would you like to create your app?',
-			initial: './my-astro-site',
-			validate(value) {
-				if (!isEmpty(value)) {
-					return notEmptyMsg(value);
-				}
-				return true;
+		const dirResponse = await prompts(
+			{
+				type: 'text',
+				name: 'directory',
+				message: 'Where would you like to create your new project?',
+				initial: './my-astro-site',
+				validate(value) {
+					if (!isEmpty(value)) {
+						return notEmptyMsg(value);
+					}
+					return true;
+				},
 			},
-		});
+			{ onCancel: () => ora().info(dim('Operation cancelled. See you later, astronaut!')) }
+		);
 		cwd = dirResponse.directory;
 	}
 
@@ -79,24 +96,30 @@ export async function main() {
 		process.exit(1);
 	}
 
-	const options = await prompts([
-		{
-			type: 'select',
-			name: 'template',
-			message: 'Which app template would you like to use?',
-			choices: TEMPLATES,
-		},
-	]);
+	const options = await prompts(
+		[
+			{
+				type: 'select',
+				name: 'template',
+				message: 'Which template would you like to use?',
+				choices: TEMPLATES,
+			},
+		],
+		{ onCancel: () => ora().info(dim('Operation cancelled. See you later, astronaut!')) }
+	);
 
 	if (!options.template) {
 		process.exit(1);
 	}
 
-	const templateSpinner = await loadWithRocketGradient('Copying project files...');
+	let templateSpinner = await loadWithRocketGradient('Copying project files...');
 
 	const hash = args.commit ? `#${args.commit}` : '';
 
-	const templateTarget = `withastro/astro/examples/${options.template}#latest`;
+	// Don't touch the template name if a GitHub repo was provided, ex: `--template cassidoo/shopify-react-astro`
+	const templateTarget = options.template.includes('/')
+		? options.template
+		: `withastro/astro/examples/${options.template}#latest`;
 
 	const emitter = degit(`${templateTarget}${hash}`, {
 		cache: false,
@@ -111,29 +134,61 @@ export async function main() {
 	});
 
 	// Copy
-	if (!args.dryrun) {
+	if (!args.dryRun) {
 		try {
 			emitter.on('info', (info) => {
 				logger.debug(info.message);
 			});
 			await emitter.clone(cwd);
+
+			// degit does not return an error when an invalid template is provided, as such we need to handle this manually
+			// It's not very pretty, but to the user eye, we just return a nice message and nothing weird happened
+			if (isEmpty(cwd)) {
+				fs.rmdirSync(cwd);
+				throw new Error(`Error: The provided template (${cyan(options.template)}) does not exist`);
+			}
 		} catch (err: any) {
+			templateSpinner.fail();
+
 			// degit is compiled, so the stacktrace is pretty noisy. Only report the stacktrace when using verbose mode.
 			logger.debug(err);
 			console.error(red(err.message));
 
-			// Warning for issue #655
-			if (err.message === 'zlib: unexpected end of file') {
+			// Warning for issue #655 and other corrupted cache issue
+			if (
+				err.message === 'zlib: unexpected end of file' ||
+				err.message === 'TAR_BAD_ARCHIVE: Unrecognized archive format'
+			) {
 				console.log(
 					yellow(
-						"This seems to be a cache related problem. Remove the folder '~/.degit/github/withastro' to fix this error."
+						'Local degit cache seems to be corrupted. For more information check out this issue: https://github.com/withastro/astro/issues/655. '
 					)
 				);
-				console.log(
-					yellow(
-						'For more information check out this issue: https://github.com/withastro/astro/issues/655'
-					)
-				);
+				const cacheIssueResponse = await prompts({
+					type: 'confirm',
+					name: 'cache',
+					message: 'Would you like us to clear the cache and try again?',
+					initial: true,
+				});
+
+				if (cacheIssueResponse.cache) {
+					const homeDirectory = os.homedir();
+					const cacheDir = path.join(homeDirectory, '.degit', 'github', 'withastro');
+
+					fs.rmSync(cacheDir, { recursive: true, force: true, maxRetries: 3 });
+
+					templateSpinner = await loadWithRocketGradient('Copying project files...');
+					try {
+						await emitter.clone(cwd);
+					} catch (e: any) {
+						logger.debug(e);
+						console.error(red(e.message));
+					}
+				} else {
+					console.log(
+						"Okay, no worries! To fix this manually, remove the folder '~/.degit/github/withastro' and rerun the command."
+					);
+				}
 			}
 
 			// Helpful message when encountering the "could not find commit hash for ..." error
@@ -149,7 +204,7 @@ export async function main() {
 					)
 				);
 			}
-			templateSpinner.fail();
+
 			process.exit(1);
 		}
 
@@ -167,18 +222,30 @@ export async function main() {
 	templateSpinner.text = green('Template copied!');
 	templateSpinner.succeed();
 
-	const installResponse = await prompts({
-		type: 'confirm',
-		name: 'install',
-		message: `Would you like us to run "${pkgManager} install?"`,
-		initial: true,
-	});
+	const installResponse = await prompts(
+		{
+			type: 'confirm',
+			name: 'install',
+			message: `Would you like to install ${pkgManager} dependencies? ${reset(
+				dim('(recommended)')
+			)}`,
+			initial: true,
+		},
+		{
+			onCancel: () => {
+				ora().info(
+					dim(
+						'Operation cancelled. Your project folder has already been created, however no dependencies have been installed'
+					)
+				);
+				process.exit(1);
+			},
+		}
+	);
 
-	if (!installResponse) {
-		process.exit(0);
-	}
-
-	if (installResponse.install && !args.dryrun) {
+	if (args.dryRun) {
+		ora().info(dim(`--dry-run enabled, skipping.`));
+	} else if (installResponse.install) {
 		const installExec = execa(pkgManager, ['install'], { cwd });
 		const installingPackagesMsg = `Installing packages${emojiWithFallback(' 📦', '...')}`;
 		const installSpinner = await loadWithRocketGradient(installingPackagesMsg);
@@ -193,87 +260,131 @@ export async function main() {
 		});
 		installSpinner.text = green('Packages installed!');
 		installSpinner.succeed();
+	} else {
+		ora().info(dim(`No problem! Remember to install dependencies after setup.`));
 	}
 
-	const astroAddCommand = installResponse.install
-		? 'astro add --yes'
-		: `${pkgManagerExecCommand(pkgManager)} astro@latest add --yes`;
+	const gitResponse = await prompts(
+		{
+			type: 'confirm',
+			name: 'git',
+			message: `Would you like to initialize a new git repository? ${reset(dim('(optional)'))}`,
+			initial: true,
+		},
+		{
+			onCancel: () => {
+				ora().info(
+					dim('Operation cancelled. No worries, your project folder has already been created')
+				);
+				process.exit(1);
+			},
+		}
+	);
 
-	const astroAddResponse = await prompts({
-		type: 'confirm',
-		name: 'astroAdd',
-		message: `Run "${astroAddCommand}?" This lets you optionally add component frameworks (ex. React), CSS frameworks (ex. Tailwind), and more.`,
-		initial: true,
-	});
-
-	if (!astroAddResponse) {
-		process.exit(0);
-	}
-
-	if (!astroAddResponse.astroAdd) {
-		ora().info(
-			`No problem. You can always run "${pkgManagerExecCommand(pkgManager)} astro add" later!`
-		);
-	}
-
-	if (astroAddResponse.astroAdd && !args.dryrun) {
-		await execaCommand(
-			astroAddCommand,
-			astroAddCommand === 'astro add --yes'
-				? { cwd, stdio: 'inherit', localDir: cwd, preferLocal: true }
-				: { cwd, stdio: 'inherit' }
-		);
-	}
-
-	const gitResponse = await prompts({
-		type: 'confirm',
-		name: 'git',
-		message: 'Initialize a git repository?',
-		initial: true,
-	});
-
-	if (!gitResponse) {
-		process.exit(0);
-	}
-
-	if (gitResponse.git && !args.dryrun) {
+	if (args.dryRun) {
+		ora().info(dim(`--dry-run enabled, skipping.`));
+	} else if (gitResponse.git) {
 		await execaCommand('git init', { cwd });
+		ora().succeed('Git repository created!');
+	} else {
+		ora().info(dim(`Sounds good! You can come back and run ${cyan(`git init`)} later.`));
 	}
 
-	ora({ text: green('Done. Ready for liftoff!') }).succeed();
+	const tsResponse = await prompts(
+		{
+			type: 'select',
+			name: 'typescript',
+			message: 'How would you like to setup TypeScript?',
+			choices: [
+				{
+					title: 'Relaxed',
+					value: 'default',
+				},
+				{
+					title: 'Strict (recommended)',
+					description: 'Enable `strict` typechecking rules',
+					value: 'strict',
+				},
+				{
+					title: 'Strictest',
+					description: 'Enable all typechecking rules',
+					value: 'stricter',
+				},
+				{
+					title: 'I prefer not to use TypeScript',
+					description: `That's cool too!`,
+					value: 'optout',
+				},
+			],
+		},
+		{
+			onCancel: () => {
+				ora().info(
+					dim(
+						'Operation cancelled. Your project folder has been created but no TypeScript configuration file was created.'
+					)
+				);
+				process.exit(1);
+			},
+		}
+	);
+
+	if (tsResponse.typescript === 'optout') {
+		console.log(``);
+		ora().warn(yellow(bold(`Astro ❤️ TypeScript!`)));
+		console.log(`  Astro supports TypeScript inside of ".astro" component scripts, so`);
+		console.log(`  we still need to create some TypeScript-related files in your project.`);
+		console.log(`  You can safely ignore these files, but don't delete them!`);
+		console.log(dim('  (ex: tsconfig.json, src/types.d.ts)'));
+		console.log(``);
+		tsResponse.typescript = 'default';
+		await wait(300);
+	}
+	if (args.dryRun) {
+		ora().info(dim(`--dry-run enabled, skipping.`));
+	} else if (tsResponse.typescript) {
+		if (tsResponse.typescript !== 'default') {
+			fs.copyFileSync(
+				path.join(
+					url.fileURLToPath(new URL('..', import.meta.url)),
+					'tsconfigs',
+					`tsconfig.${tsResponse.typescript}.json`
+				),
+				path.join(cwd, 'tsconfig.json')
+			);
+		}
+		ora().succeed('TypeScript settings applied!');
+	}
+
+	ora().succeed('Setup complete.');
+	ora({ text: green('Ready for liftoff!') }).succeed();
+	await wait(300);
+
 	console.log(`\n${bgCyan(black(' Next steps '))}\n`);
 
-	const projectDir = path.relative(process.cwd(), cwd);
+	let projectDir = path.relative(process.cwd(), cwd);
 	const devCmd = pkgManager === 'npm' ? 'npm run dev' : `${pkgManager} dev`;
 
-	console.log(
-		`You can now ${bold(cyan('cd'))} into the ${bold(cyan(projectDir))} project directory.`
-	);
-	console.log(
+	// If the project dir is the current dir, no need to tell users to cd in the folder
+	if (projectDir !== '/') {
+		await logAndWait(
+			`You can now ${bold(cyan('cd'))} into the ${bold(cyan(projectDir))} project directory.`
+		);
+	}
+	await logAndWait(
 		`Run ${bold(cyan(devCmd))} to start the Astro dev server. ${bold(cyan('CTRL-C'))} to close.`
 	);
-	if (!installResponse.install) {
-		console.log(yellow(`Remember to install dependencies first!`));
-	}
-	console.log(`\nStuck? Come join us at ${bold(cyan('https://astro.build/chat'))}`);
+	await logAndWait(
+		`Add frameworks like ${bold(cyan('react'))} and ${bold(
+			cyan('tailwind')
+		)} to your project using ${bold(cyan('astro add'))}`
+	);
+	await logAndWait('');
+	await logAndWait(`Stuck? Come join us at ${bold(cyan('https://astro.build/chat'))}`, 750);
+	await logAndWait(dim('Good luck out there, astronaut.'));
+	await logAndWait('', 300);
 }
 
 function emojiWithFallback(char: string, fallback: string) {
 	return process.platform !== 'win32' ? char : fallback;
-}
-
-function pkgManagerFromUserAgent(userAgent?: string) {
-	if (!userAgent) return 'npm';
-	const pkgSpec = userAgent.split(' ')[0];
-	const pkgSpecArr = pkgSpec.split('/');
-	return pkgSpecArr[0];
-}
-
-function pkgManagerExecCommand(pkgManager: string) {
-	if (pkgManager === 'pnpm') {
-		return 'pnpx';
-	} else {
-		// note: yarn does not have an "npx" equivalent
-		return 'npx';
-	}
 }

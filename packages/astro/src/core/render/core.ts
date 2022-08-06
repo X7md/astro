@@ -4,12 +4,13 @@ import type {
 	Params,
 	Props,
 	RouteData,
+	RuntimeMode,
 	SSRElement,
 	SSRLoadedRenderer,
 } from '../../@types/astro';
 import type { LogOptions } from '../logger/core.js';
 
-import { renderComponent, renderHead, renderPage } from '../../runtime/server/index.js';
+import { Fragment, renderPage } from '../../runtime/server/index.js';
 import { getParams } from '../routing/params.js';
 import { createResult } from './result.js';
 import { callGetStaticPaths, findPathItemByKey, RouteCache } from './route-cache.js';
@@ -66,11 +67,13 @@ export async function getParamsAndProps(
 }
 
 export interface RenderOptions {
+	adapterName: string | undefined;
 	logging: LogOptions;
 	links: Set<SSRElement>;
 	styles?: Set<SSRElement>;
 	markdown: MarkdownRenderingOptions;
 	mod: ComponentInstance;
+	mode: RuntimeMode;
 	origin: string;
 	pathname: string;
 	scripts: Set<SSRElement>;
@@ -80,21 +83,21 @@ export interface RenderOptions {
 	routeCache: RouteCache;
 	site?: string;
 	ssr: boolean;
+	streaming: boolean;
 	request: Request;
+	status?: number;
 }
 
-export async function render(
-	opts: RenderOptions
-): Promise<
-	{ type: 'html'; html: string; response: ResponseInit } | { type: 'response'; response: Response }
-> {
+export async function render(opts: RenderOptions): Promise<Response> {
 	const {
+		adapterName,
 		links,
 		styles,
 		logging,
 		origin,
 		markdown,
 		mod,
+		mode,
 		pathname,
 		scripts,
 		renderers,
@@ -104,6 +107,8 @@ export async function render(
 		routeCache,
 		site,
 		ssr,
+		streaming,
+		status = 200,
 	} = opts;
 
 	const paramsAndPropsRes = await getParamsAndProps({
@@ -128,10 +133,12 @@ export async function render(
 		throw new Error(`Expected an exported Astro component but received typeof ${typeof Component}`);
 
 	const result = createResult({
+		adapterName,
 		links,
 		styles,
 		logging,
 		markdown,
+		mode,
 		origin,
 		params,
 		props: pageProps,
@@ -142,40 +149,21 @@ export async function render(
 		site,
 		scripts,
 		ssr,
+		streaming,
+		status,
 	});
 
-	let page: Awaited<ReturnType<typeof renderPage>>;
-	if (!Component.isAstroComponentFactory) {
-		const props: Record<string, any> = { ...(pageProps ?? {}), 'server:root': true };
-		const html = await renderComponent(result, Component.name, Component, props, null);
-		page = {
-			type: 'html',
-			html: html.toString(),
-		};
-	} else {
-		page = await renderPage(result, Component, pageProps, null);
+	// Support `export const components` for `MDX` pages
+	if (typeof (mod as any).components === 'object') {
+		Object.assign(pageProps, { components: (mod as any).components });
 	}
 
-	if (page.type === 'response') {
-		return page;
+	// HACK: expose `Fragment` for all MDX components
+	if (typeof mod.default === 'function' && mod.default.name.startsWith('MDX')) {
+		Object.assign(pageProps, {
+			components: Object.assign((pageProps?.components as any) ?? {}, { Fragment }),
+		});
 	}
 
-	let html = page.html;
-	// handle final head injection if it hasn't happened already
-	if (html.indexOf('<!--astro:head:injected-->') == -1) {
-		html = (await renderHead(result)) + html;
-	}
-	// cleanup internal state flags
-	html = html.replace('<!--astro:head:injected-->', '');
-
-	// inject <!doctype html> if missing (TODO: is a more robust check needed for comments, etc.?)
-	if (!/<!doctype html/i.test(html)) {
-		html = '<!DOCTYPE html>\n' + html;
-	}
-
-	return {
-		type: 'html',
-		html,
-		response: result.response,
-	};
+	return await renderPage(result, Component, pageProps, null, streaming);
 }

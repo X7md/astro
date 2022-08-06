@@ -1,11 +1,8 @@
-import { test as base, expect } from '@playwright/test';
-import { loadFixture } from './test-utils.js';
+import { expect } from '@playwright/test';
+import { testFactory } from './test-utils.js';
 
-const test = base.extend({
-	astro: async ({}, use) => {
-		const fixture = await loadFixture({ root: './fixtures/pass-js/' });
-		await use(fixture);
-	},
+const test = testFactory({
+	root: './fixtures/pass-js/',
 });
 
 let devServer;
@@ -57,5 +54,25 @@ test.describe('Passing JS into client components', () => {
 		const arrValue = await page.locator('#arr-value');
 		await expect(arrValue, 'is visible').toBeVisible();
 		await expect(arrValue).toHaveText('0,foo');
+	});
+
+	test('Maps and Sets', async ({ page }) => {
+		await page.goto('/');
+
+		const mapType = page.locator('#map-type');
+		await expect(mapType, 'is visible').toBeVisible();
+		await expect(mapType).toHaveText('[object Map]');
+
+		const mapValues = page.locator('#map-items li');
+		expect(await mapValues.count()).toEqual(2);
+
+		const texts = await mapValues.allTextContents();
+		expect(texts).toEqual(['test1: test2', 'test3: test4']);
+
+		const setType = page.locator('#set-type');
+		await expect(setType, 'is visible').toBeVisible();
+
+		const setValue = page.locator('#set-value');
+		await expect(setValue).toHaveText('test1,test2');
 	});
 });

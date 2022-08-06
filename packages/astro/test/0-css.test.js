@@ -46,7 +46,7 @@ describe('CSS', function () {
 				expect(el2.attr('class')).to.equal(`visible ${scopedClass}`);
 
 				// 2. check CSS
-				const expected = `.blue.${scopedClass}{color:#b0e0e6}.color\\\\:blue.${scopedClass}{color:#b0e0e6}.visible.${scopedClass}{display:block}`;
+				const expected = `.blue:where(.${scopedClass}){color:#b0e0e6}.color\\\\:blue:where(.${scopedClass}){color:#b0e0e6}.visible:where(.${scopedClass}){display:block}`;
 				expect(bundledCSS).to.include(expected);
 			});
 
@@ -65,15 +65,15 @@ describe('CSS', function () {
 
 			it('Using hydrated components adds astro-island styles', async () => {
 				const inline = $('style').html();
-				expect(inline).to.include('display: contents');
+				expect(inline).to.include('display:contents');
 			});
 
 			it('<style lang="sass">', async () => {
-				expect(bundledCSS).to.match(new RegExp('h1.astro-[^{]*{color:#90ee90}'));
+				expect(bundledCSS).to.match(new RegExp('h1\\:where\\(.astro-[^{]*{color:#90ee90}'));
 			});
 
 			it('<style lang="scss">', async () => {
-				expect(bundledCSS).to.match(new RegExp('h1.astro-[^{]*{color:#ff69b4}'));
+				expect(bundledCSS).to.match(new RegExp('h1\\:where\\(.astro-[^{]*{color:#ff69b4}'));
 			});
 		});
 
@@ -298,7 +298,7 @@ describe('CSS', function () {
 		});
 
 		it('resolves ESM style imports', async () => {
-			const allInjectedStyles = $('style[data-astro-injected]').text().replace(/\s*/g, '');
+			const allInjectedStyles = $('style').text().replace(/\s*/g, '');
 
 			expect(allInjectedStyles, 'styles/imported-url.css').to.contain('.imported{');
 			expect(allInjectedStyles, 'styles/imported-url.sass').to.contain('.imported-sass{');
@@ -306,12 +306,12 @@ describe('CSS', function () {
 		});
 
 		it('resolves Astro styles', async () => {
-			const allInjectedStyles = $('style[data-astro-injected]').text();
+			const allInjectedStyles = $('style').text();
 
-			expect(allInjectedStyles).to.contain('.linked-css.astro-');
-			expect(allInjectedStyles).to.contain('.linked-sass.astro-');
-			expect(allInjectedStyles).to.contain('.linked-scss.astro-');
-			expect(allInjectedStyles).to.contain('.wrapper.astro-');
+			expect(allInjectedStyles).to.contain('.linked-css:where(.astro-');
+			expect(allInjectedStyles).to.contain('.linked-sass:where(.astro-');
+			expect(allInjectedStyles).to.contain('.linked-scss:where(.astro-');
+			expect(allInjectedStyles).to.contain('.wrapper:where(.astro-');
 		});
 
 		it('resolves Styles from React', async () => {
@@ -325,7 +325,7 @@ describe('CSS', function () {
 				expect((await fixture.fetch(href)).status, style).to.equal(200);
 			}
 
-			const allInjectedStyles = $('style[data-astro-injected]').text().replace(/\s*/g, '');
+			const allInjectedStyles = $('style').text().replace(/\s*/g, '');
 
 			expect(allInjectedStyles).to.contain('.react-title{');
 			expect(allInjectedStyles).to.contain('.react-sass-title{');
@@ -333,7 +333,7 @@ describe('CSS', function () {
 		});
 
 		it('resolves CSS from Svelte', async () => {
-			const allInjectedStyles = $('style[data-astro-injected]').text();
+			const allInjectedStyles = $('style').text();
 
 			expect(allInjectedStyles).to.contain('.svelte-css');
 			expect(allInjectedStyles).to.contain('.svelte-sass');
@@ -347,7 +347,7 @@ describe('CSS', function () {
 				expect((await fixture.fetch(href)).status, style).to.equal(200);
 			}
 
-			const allInjectedStyles = $('style[data-astro-injected]').text().replace(/\s*/g, '');
+			const allInjectedStyles = $('style').text().replace(/\s*/g, '');
 
 			expect(allInjectedStyles).to.contain('.vue-css{');
 			expect(allInjectedStyles).to.contain('.vue-sass{');

@@ -10,14 +10,16 @@ import { serializeListValue } from './util.js';
 
 const HydrationDirectives = ['load', 'idle', 'media', 'visible', 'only'];
 
+export interface HydrationMetadata {
+	directive: string;
+	value: string;
+	componentUrl: string;
+	componentExport: { value: string };
+}
+
 interface ExtractedProps {
 	isPage: boolean;
-	hydration: {
-		directive: string;
-		value: string;
-		componentUrl: string;
-		componentExport: { value: string };
-	} | null;
+	hydration: HydrationMetadata | null;
 	props: Record<string | number, any>;
 }
 
@@ -56,6 +58,9 @@ export function extractDirectives(inputProps: Record<string | number, any>): Ext
 				// This is a special prop added to prove that the client hydration method
 				// was added statically.
 				case 'client:component-hydration': {
+					break;
+				}
+				case 'client:display-name': {
 					break;
 				}
 				default: {

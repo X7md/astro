@@ -1,12 +1,13 @@
 import type { MarkdownRenderingOptions, MarkdownRenderingResult } from './types';
 
 import { loadPlugins } from './load-plugins.js';
-import createCollectHeaders from './rehype-collect-headers.js';
+import createCollectHeadings from './rehype-collect-headings.js';
 import rehypeEscape from './rehype-escape.js';
 import rehypeExpressions from './rehype-expressions.js';
 import rehypeIslands from './rehype-islands.js';
 import rehypeJsx from './rehype-jsx.js';
 import remarkEscape from './remark-escape.js';
+import { remarkInitializeAstroData } from './remark-initialize-astro-data.js';
 import remarkMarkAndUnravel from './remark-mark-and-unravel.js';
 import remarkMdxish from './remark-mdxish.js';
 import remarkPrism from './remark-prism.js';
@@ -29,25 +30,24 @@ export const DEFAULT_REHYPE_PLUGINS = [];
 /** Shared utility for rendering markdown */
 export async function renderMarkdown(
 	content: string,
-	opts: MarkdownRenderingOptions = {}
+	opts: MarkdownRenderingOptions
 ): Promise<MarkdownRenderingResult> {
 	let {
 		fileURL,
-		mode = 'mdx',
 		syntaxHighlight = 'shiki',
 		shikiConfig = {},
 		remarkPlugins = [],
 		rehypePlugins = [],
+		isAstroFlavoredMd = false,
 	} = opts;
 	const input = new VFile({ value: content, path: fileURL });
 	const scopedClassName = opts.$?.scopedClassName;
-	const isMDX = mode === 'mdx';
-	const { headers, rehypeCollectHeaders } = createCollectHeaders();
+	const { headings, rehypeCollectHeadings } = createCollectHeadings();
 
 	let parser = unified()
 		.use(markdown)
-		.use(isMDX ? [remarkMdxish, remarkMarkAndUnravel] : [])
-		.use([remarkUnwrap, remarkEscape]);
+		.use(remarkInitializeAstroData)
+		.use(isAstroFlavoredMd ? [remarkMdxish, remarkMarkAndUnravel, remarkUnwrap, remarkEscape] : []);
 
 	if (remarkPlugins.length === 0 && rehypePlugins.length === 0) {
 		remarkPlugins = [...DEFAULT_REMARK_PLUGINS];
@@ -57,8 +57,8 @@ export async function renderMarkdown(
 	const loadedRemarkPlugins = await Promise.all(loadPlugins(remarkPlugins));
 	const loadedRehypePlugins = await Promise.all(loadPlugins(rehypePlugins));
 
-	loadedRemarkPlugins.forEach(([plugin, opts]) => {
-		parser.use([[plugin, opts]]);
+	loadedRemarkPlugins.forEach(([plugin, pluginOpts]) => {
+		parser.use([[plugin, pluginOpts]]);
 	});
 
 	if (scopedClassName) {
@@ -76,43 +76,47 @@ export async function renderMarkdown(
 			markdownToHtml as any,
 			{
 				allowDangerousHtml: true,
-				passThrough: [
-					'raw',
-					'mdxFlowExpression',
-					'mdxJsxFlowElement',
-					'mdxJsxTextElement',
-					'mdxTextExpression',
-				],
+				passThrough: isAstroFlavoredMd
+					? [
+							'raw',
+							'mdxFlowExpression',
+							'mdxJsxFlowElement',
+							'mdxJsxTextElement',
+							'mdxTextExpression',
+					  ]
+					: [],
 			},
 		],
 	]);
 
-	loadedRehypePlugins.forEach(([plugin, opts]) => {
-		parser.use([[plugin, opts]]);
+	loadedRehypePlugins.forEach(([plugin, pluginOpts]) => {
+		parser.use([[plugin, pluginOpts]]);
 	});
 
 	parser
-		.use(isMDX ? [rehypeJsx, rehypeExpressions] : [rehypeRaw])
-		.use(rehypeEscape)
-		.use(rehypeIslands)
-		.use([rehypeCollectHeaders])
+		.use(
+			isAstroFlavoredMd
+				? [rehypeJsx, rehypeExpressions, rehypeEscape, rehypeIslands, rehypeCollectHeadings]
+				: [rehypeCollectHeadings, rehypeRaw]
+		)
 		.use(rehypeStringify, { allowDangerousHtml: true });
 
-	let result: string;
+	let vfile: VFile;
 	try {
-		const vfile = await parser.process(input);
-		result = vfile.toString();
+		vfile = await parser.process(input);
 	} catch (err) {
 		// Ensure that the error message contains the input filename
 		// to make it easier for the user to fix the issue
 		err = prefixError(err, `Failed to parse Markdown file "${input.path}"`);
+		// eslint-disable-next-line no-console
 		console.error(err);
 		throw err;
 	}
 
 	return {
-		metadata: { headers, source: content, html: result.toString() },
-		code: result.toString(),
+		metadata: { headings, source: content, html: String(vfile.value) },
+		code: String(vfile.value),
+		vfile,
 	};
 }
 

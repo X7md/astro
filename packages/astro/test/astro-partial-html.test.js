@@ -25,8 +25,8 @@ describe('Partial HTML', async () => {
 		expect(html).to.match(/^<!DOCTYPE html/);
 
 		// test 2: correct CSS present
-		const allInjectedStyles = $('style[data-astro-injected]').text();
-		expect(allInjectedStyles).to.match(/\.astro-[^{]+{color:red}/);
+		const allInjectedStyles = $('style').text();
+		expect(allInjectedStyles).to.match(/\:where\(\.astro-[^{]+{color:red}/);
 	});
 
 	it('injects framework styles', async () => {
@@ -37,7 +37,13 @@ describe('Partial HTML', async () => {
 		expect(html).to.match(/^<!DOCTYPE html/);
 
 		// test 2: link tag present
-		const allInjectedStyles = $('style[data-astro-injected]').text().replace(/\s*/g, '');
+		const allInjectedStyles = $('style').text().replace(/\s*/g, '');
 		expect(allInjectedStyles).to.match(/h1{color:red;}/);
+	});
+
+	it('pages with a head, injection happens inside', async () => {
+		const html = await fixture.fetch('/with-head').then((res) => res.text());
+		const $ = cheerio.load(html);
+		expect($('style')).to.have.lengthOf(1);
 	});
 });

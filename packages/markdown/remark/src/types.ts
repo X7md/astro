@@ -2,6 +2,7 @@ import type * as hast from 'hast';
 import type * as mdast from 'mdast';
 import type { ILanguageRegistration, IThemeRegistration, Theme } from 'shiki';
 import type * as unified from 'unified';
+import type { VFile } from 'vfile';
 
 export type { Node } from 'unist';
 
@@ -41,21 +42,23 @@ export interface MarkdownRenderingOptions extends AstroMarkdownOptions {
 	$?: {
 		scopedClassName: string | null;
 	};
+	isAstroFlavoredMd?: boolean;
 }
 
-export interface MarkdownHeader {
+export interface MarkdownHeading {
 	depth: number;
 	slug: string;
 	text: string;
 }
 
 export interface MarkdownMetadata {
-	headers: MarkdownHeader[];
+	headings: MarkdownHeading[];
 	source: string;
 	html: string;
 }
 
 export interface MarkdownRenderingResult {
 	metadata: MarkdownMetadata;
+	vfile: VFile;
 	code: string;
 }

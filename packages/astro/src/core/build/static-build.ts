@@ -1,38 +1,46 @@
 import glob from 'fast-glob';
 import fs from 'fs';
 import { bgGreen, bgMagenta, black, dim } from 'kleur/colors';
-import type { RollupOutput } from 'rollup';
 import { fileURLToPath } from 'url';
 import * as vite from 'vite';
-import {
-	BuildInternals,
-	createBuildInternals,
-	trackClientOnlyPageDatas,
-} from '../../core/build/internal.js';
+import { BuildInternals, createBuildInternals } from '../../core/build/internal.js';
 import { prependForwardSlash } from '../../core/path.js';
-import { emptyDir, removeDir } from '../../core/util.js';
+import { emptyDir, isModeServerWithNoAdapter, removeDir } from '../../core/util.js';
 import { runHookBuildSetup } from '../../integrations/index.js';
-import { rollupPluginAstroBuildCSS } from '../../vite-plugin-build-css/index.js';
+import { PAGE_SCRIPT_ID } from '../../vite-plugin-scripts/index.js';
 import type { ViteConfigWithSSR } from '../create-vite';
 import { info } from '../logger/core.js';
-import { isBuildingToSSR } from '../util.js';
 import { generatePages } from './generate.js';
 import { trackPageData } from './internal.js';
 import type { PageBuildData, StaticBuildOptions } from './types';
 import { getTimeStat } from './util.js';
+import { vitePluginAnalyzer } from './vite-plugin-analyzer.js';
+import { rollupPluginAstroBuildCSS } from './vite-plugin-css.js';
 import { vitePluginHoistedScripts } from './vite-plugin-hoisted-scripts.js';
 import { vitePluginInternals } from './vite-plugin-internals.js';
 import { vitePluginPages } from './vite-plugin-pages.js';
-import { vitePluginSSR } from './vite-plugin-ssr.js';
+import { injectManifest, vitePluginSSR } from './vite-plugin-ssr.js';
 
 export async function staticBuild(opts: StaticBuildOptions) {
 	const { allPages, astroConfig } = opts;
 
+	// Verify this app is buildable.
+	if (isModeServerWithNoAdapter(opts.astroConfig)) {
+		throw new Error(`Cannot use \`output: 'server'\` without an adapter.
+Install and configure the appropriate server adapter for your final deployment.
+Example:
+
+  // astro.config.js
+  import netlify from '@astrojs/netlify';
+  export default {
+    output: 'server',
+    adapter: netlify(),
+  }
+`);
+	}
+
 	// The pages to be built for rendering purposes.
 	const pageInput = new Set<string>();
-
-	// The JavaScript entrypoints.
-	const jsInput = new Set<string>();
 
 	// A map of each page .astro file, to the PageBuildData which contains information
 	// about that page, such as its paths.
@@ -40,7 +48,6 @@ export async function staticBuild(opts: StaticBuildOptions) {
 
 	// Build internals needed by the CSS plugin
 	const internals = createBuildInternals();
-	const uniqueHoistedIds = new Map<string, string>();
 
 	const timer: Record<string, number> = {};
 
@@ -53,66 +60,6 @@ export async function staticBuild(opts: StaticBuildOptions) {
 		// Track the page data in internals
 		trackPageData(internals, component, pageData, astroModuleId, astroModuleURL);
 
-		if (pageData.route.type === 'page') {
-			const [renderers, mod] = pageData.preload;
-			const metadata = mod.$$metadata;
-
-			const topLevelImports = new Set([
-				// The client path for each renderer
-				...renderers
-					.filter((renderer) => !!renderer.clientEntrypoint)
-					.map((renderer) => renderer.clientEntrypoint!),
-			]);
-
-			if (metadata) {
-				// Any component that gets hydrated
-				// 'components/Counter.jsx'
-				// { 'components/Counter.jsx': 'counter.hash.js' }
-				for (const hydratedComponentPath of metadata.hydratedComponentPaths()) {
-					topLevelImports.add(hydratedComponentPath);
-				}
-
-				// Track client:only usage so we can map their CSS back to the Page they are used in.
-				const clientOnlys = Array.from(metadata.clientOnlyComponentPaths());
-				trackClientOnlyPageDatas(internals, pageData, clientOnlys);
-
-				// Client-only components
-				for (const clientOnly of clientOnlys) {
-					topLevelImports.add(clientOnly);
-				}
-
-				// Add hoisted scripts
-				const hoistedScripts = new Set(metadata.hoistedScriptPaths());
-				if (hoistedScripts.size) {
-					const uniqueHoistedId = JSON.stringify(Array.from(hoistedScripts).sort());
-					let moduleId: string;
-
-					// If we're already tracking this set of hoisted scripts, get the unique id
-					if (uniqueHoistedIds.has(uniqueHoistedId)) {
-						moduleId = uniqueHoistedIds.get(uniqueHoistedId)!;
-					} else {
-						// Otherwise, create a unique id for this set of hoisted scripts
-						moduleId = `/astro/hoisted.js?q=${uniqueHoistedIds.size}`;
-						uniqueHoistedIds.set(uniqueHoistedId, moduleId);
-					}
-					topLevelImports.add(moduleId);
-
-					// Make sure to track that this page uses this set of hoisted scripts
-					if (internals.hoistedScriptIdToPagesMap.has(moduleId)) {
-						const pages = internals.hoistedScriptIdToPagesMap.get(moduleId);
-						pages!.add(astroModuleId);
-					} else {
-						internals.hoistedScriptIdToPagesMap.set(moduleId, new Set([astroModuleId]));
-						internals.hoistedScriptIdToHoistedMap.set(moduleId, hoistedScripts);
-					}
-				}
-			}
-
-			for (const specifier of topLevelImports) {
-				jsInput.add(specifier);
-			}
-		}
-
 		pageInput.add(astroModuleId);
 		facadeIdToPageDataMap.set(fileURLToPath(astroModuleURL), pageData);
 	}
@@ -122,30 +69,42 @@ export async function staticBuild(opts: StaticBuildOptions) {
 	// condition, so we are doing it ourselves
 	emptyDir(astroConfig.outDir, new Set('.git'));
 
-	timer.clientBuild = performance.now();
-	// Run client build first, so the assets can be fed into the SSR rendered version.
-	await clientBuild(opts, internals, jsInput);
-
 	// Build your project (SSR application code, assets, client JS, etc.)
 	timer.ssr = performance.now();
-	info(
-		opts.logging,
-		'build',
-		isBuildingToSSR(astroConfig)
-			? 'Building SSR entrypoints...'
-			: 'Building entrypoints for prerendering...'
-	);
-	const ssrResult = (await ssrBuild(opts, internals, pageInput)) as RollupOutput;
+	info(opts.logging, 'build', `Building ${astroConfig.output} entrypoints...`);
+	await ssrBuild(opts, internals, pageInput);
 	info(opts.logging, 'build', dim(`Completed in ${getTimeStat(timer.ssr, performance.now())}.`));
 
+	const rendererClientEntrypoints = opts.astroConfig._ctx.renderers
+		.map((r) => r.clientEntrypoint)
+		.filter((a) => typeof a === 'string') as string[];
+
+	const clientInput = new Set([
+		...internals.discoveredHydratedComponents,
+		...internals.discoveredClientOnlyComponents,
+		...rendererClientEntrypoints,
+		...internals.discoveredScripts,
+	]);
+
+	if (astroConfig._ctx.scripts.some((script) => script.stage === 'page')) {
+		clientInput.add(PAGE_SCRIPT_ID);
+	}
+
+	// Run client build first, so the assets can be fed into the SSR rendered version.
+	timer.clientBuild = performance.now();
+	await clientBuild(opts, internals, clientInput);
+
 	timer.generate = performance.now();
-	if (opts.buildConfig.staticMode) {
+	if (astroConfig.output === 'static') {
 		try {
-			await generatePages(ssrResult, opts, internals, facadeIdToPageDataMap);
+			await generatePages(opts, internals);
 		} finally {
 			await cleanSsrOutput(opts);
 		}
 	} else {
+		// Inject the manifest
+		await injectManifest(opts, internals);
+
 		info(opts.logging, null, `\n${bgMagenta(black(' finalizing server assets '))}\n`);
 		await ssrMoveAssets(opts);
 	}
@@ -153,7 +112,7 @@ export async function staticBuild(opts: StaticBuildOptions) {
 
 async function ssrBuild(opts: StaticBuildOptions, internals: BuildInternals, input: Set<string>) {
 	const { astroConfig, viteConfig } = opts;
-	const ssr = isBuildingToSSR(astroConfig);
+	const ssr = astroConfig.output === 'server';
 	const out = ssr ? opts.buildConfig.server : astroConfig.outDir;
 
 	const viteBuildConfig: ViteConfigWithSSR = {
@@ -173,12 +132,13 @@ async function ssrBuild(opts: StaticBuildOptions, internals: BuildInternals, inp
 				input: [],
 				output: {
 					format: 'esm',
-					entryFileNames: opts.buildConfig.serverEntry,
-					chunkFileNames: 'chunks/chunk.[hash].mjs',
-					assetFileNames: 'assets/asset.[hash][extname]',
+					chunkFileNames: 'chunks/[name].[hash].mjs',
+					assetFileNames: 'assets/[name].[hash][extname]',
 					...viteConfig.build?.rollupOptions?.output,
+					entryFileNames: opts.buildConfig.serverEntry,
 				},
 			},
+
 			ssr: true,
 			// must match an esbuild target
 			target: 'esnext',
@@ -191,13 +151,16 @@ async function ssrBuild(opts: StaticBuildOptions, internals: BuildInternals, inp
 			vitePluginInternals(input, internals),
 			vitePluginPages(opts, internals),
 			rollupPluginAstroBuildCSS({
+				buildOptions: opts,
 				internals,
 				target: 'server',
+				astroConfig,
 			}),
 			...(viteConfig.plugins || []),
 			// SSR needs to be last
-			isBuildingToSSR(opts.astroConfig) &&
-				vitePluginSSR(opts, internals, opts.astroConfig._ctx.adapter!),
+			opts.astroConfig.output === 'server' &&
+				vitePluginSSR(internals, opts.astroConfig._ctx.adapter!),
+			vitePluginAnalyzer(internals),
 		],
 		publicDir: ssr ? false : viteConfig.publicDir,
 		root: viteConfig.root,
@@ -226,7 +189,7 @@ async function clientBuild(
 ) {
 	const { astroConfig, viteConfig } = opts;
 	const timer = performance.now();
-	const ssr = isBuildingToSSR(astroConfig);
+	const ssr = astroConfig.output === 'server';
 	const out = ssr ? opts.buildConfig.client : astroConfig.outDir;
 
 	// Nothing to do if there is no client-side JS.
@@ -258,9 +221,9 @@ async function clientBuild(
 				input: Array.from(input),
 				output: {
 					format: 'esm',
-					entryFileNames: 'entry.[hash].js',
-					chunkFileNames: 'chunks/chunk.[hash].js',
-					assetFileNames: 'assets/asset.[hash][extname]',
+					entryFileNames: '[name].[hash].js',
+					chunkFileNames: 'chunks/[name].[hash].js',
+					assetFileNames: 'assets/[name].[hash][extname]',
 					...viteConfig.build?.rollupOptions?.output,
 				},
 				preserveEntrySignatures: 'exports-only',
@@ -271,8 +234,10 @@ async function clientBuild(
 			vitePluginInternals(input, internals),
 			vitePluginHoistedScripts(astroConfig, internals),
 			rollupPluginAstroBuildCSS({
+				buildOptions: opts,
 				internals,
 				target: 'client',
+				astroConfig,
 			}),
 			...(viteConfig.plugins || []),
 		],
@@ -327,9 +292,8 @@ async function copyFiles(fromFolder: URL, toFolder: URL) {
 
 async function ssrMoveAssets(opts: StaticBuildOptions) {
 	info(opts.logging, 'build', 'Rearranging server assets...');
-	const serverRoot = opts.buildConfig.staticMode
-		? opts.buildConfig.client
-		: opts.buildConfig.server;
+	const serverRoot =
+		opts.astroConfig.output === 'static' ? opts.buildConfig.client : opts.buildConfig.server;
 	const clientRoot = opts.buildConfig.client;
 	const serverAssets = new URL('./assets/', serverRoot);
 	const clientAssets = new URL('./assets/', clientRoot);
