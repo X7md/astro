@@ -85,7 +85,7 @@ export default async function add(names: string[], { cwd, flags, logging, teleme
 					['partytown', 'astro add partytown'],
 					['sitemap', 'astro add sitemap'],
 				],
-				'Example: Add an Adapter': [
+				'Example: Add an SSR Adapter': [
 					['netlify', 'astro add netlify'],
 					['vercel', 'astro add vercel'],
 					['deno', 'astro add deno'],
@@ -289,11 +289,30 @@ async function parseAstroConfig(configURL: URL): Promise<t.File> {
 	return result;
 }
 
+// Convert an arbitrary NPM package name into a JS identifier
+// Some examples:
+//  - @astrojs/image => image
+//  - @astrojs/markdown-component => markdownComponent
+//  - astro-cast => cast
+//  - markdown-astro => markdown
+//  - some-package => somePackage
+//  - example.com => exampleCom
+//  - under_score => underScore
+//  - 123numeric => numeric
+//  - @npm/thingy => npmThingy
+//  - @jane/foo.js => janeFoo
 const toIdent = (name: string) => {
-	if (name.includes('-')) {
-		return name.split('-')[0];
-	}
-	return name;
+	const ident = name
+		.trim()
+		// Remove astro or (astrojs) prefix and suffix
+		.replace(/[-_\.]?astro(?:js)?[-_\.]?/g, '')
+		// drop .js suffix
+		.replace(/\.js/, '')
+		// convert to camel case
+		.replace(/(?:[\.\-\_\/]+)([a-zA-Z])/g, (_, w) => w.toUpperCase())
+		// drop invalid first characters
+		.replace(/^[^a-zA-Z$_]+/, '');
+	return `${ident[0].toLowerCase()}${ident.slice(1)}`;
 };
 
 function createPrettyError(err: Error) {
@@ -376,6 +395,23 @@ async function setAdapter(ast: t.File, adapter: IntegrationInfo, exportName: str
 
 			const configObject = path.node.declaration.arguments[0];
 			if (!t.isObjectExpression(configObject)) return;
+
+			let outputProp = configObject.properties.find((prop) => {
+				if (prop.type !== 'ObjectProperty') return false;
+				if (prop.key.type === 'Identifier') {
+					if (prop.key.name === 'output') return true;
+				}
+				if (prop.key.type === 'StringLiteral') {
+					if (prop.key.value === 'output') return true;
+				}
+				return false;
+			}) as t.ObjectProperty | undefined;
+
+			if (!outputProp) {
+				configObject.properties.push(
+					t.objectProperty(t.identifier('output'), t.stringLiteral('server'))
+				);
+			}
 
 			let adapterProp = configObject.properties.find((prop) => {
 				if (prop.type !== 'ObjectProperty') return false;
@@ -583,7 +619,7 @@ async function fetchPackageJson(
 	name: string,
 	tag: string
 ): Promise<object | Error> {
-	const packageName = `${scope ? `@${scope}/` : ''}${name}`;
+	const packageName = `${scope ? `${scope}/` : ''}${name}`;
 	const res = await fetch(`https://registry.npmjs.org/${packageName}/${tag}`);
 	if (res.status === 404) {
 		return new Error();
@@ -601,13 +637,14 @@ export async function validateIntegrations(integrations: string[]): Promise<Inte
 				if (!parsed) {
 					throw new Error(`${bold(integration)} does not appear to be a valid package name!`);
 				}
-
 				let { scope, name, tag } = parsed;
-				let pkgJson = null;
-				let pkgType: 'first-party' | 'third-party' = 'first-party';
+				let pkgJson;
+				let pkgType: 'first-party' | 'third-party';
 
-				if (!scope) {
-					const firstPartyPkgCheck = await fetchPackageJson('astrojs', name, tag);
+				if (scope && scope !== '@astrojs') {
+					pkgType = 'third-party';
+				} else {
+					const firstPartyPkgCheck = await fetchPackageJson('@astrojs', name, tag);
 					if (firstPartyPkgCheck instanceof Error) {
 						spinner.warn(
 							yellow(`${bold(integration)} is not an official Astro package. Use at your own risk!`)
@@ -628,6 +665,7 @@ export async function validateIntegrations(integrations: string[]): Promise<Inte
 						spinner.start('Resolving with third party packages...');
 						pkgType = 'third-party';
 					} else {
+						pkgType = 'first-party';
 						pkgJson = firstPartyPkgCheck as any;
 					}
 				}
@@ -640,8 +678,8 @@ export async function validateIntegrations(integrations: string[]): Promise<Inte
 					}
 				}
 
-				const resolvedScope = pkgType === 'first-party' ? 'astrojs' : scope;
-				const packageName = `${resolvedScope ? `@${resolvedScope}/` : ''}${name}`;
+				const resolvedScope = pkgType === 'first-party' ? '@astrojs' : scope;
+				const packageName = `${resolvedScope ? `${resolvedScope}/` : ''}${name}`;
 
 				let dependencies: IntegrationInfo['dependencies'] = [
 					[pkgJson['name'], `^${pkgJson['version']}`],
@@ -701,7 +739,7 @@ function parseIntegrationName(spec: string) {
 }
 
 async function askToContinue({ flags }: { flags: yargs.Arguments }): Promise<boolean> {
-	if (flags.yes) return true;
+	if (flags.yes || flags.y) return true;
 
 	const response = await prompts({
 		type: 'confirm',

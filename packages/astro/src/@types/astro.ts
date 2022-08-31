@@ -4,6 +4,7 @@ import type {
 	MarkdownRenderingResult,
 	RehypePlugins,
 	RemarkPlugins,
+	RemarkRehype,
 	ShikiConfig,
 } from '@astrojs/markdown-remark';
 import type * as babel from '@babel/core';
@@ -203,7 +204,7 @@ export interface AstroGlobal extends AstroGlobalPartial {
 		 */
 		has(slotName: string): boolean;
 		/**
-		 * Asychronously renders this slot and returns HTML
+		 * Asynchronously renders this slot and returns a string
 		 *
 		 * Example usage:
 		 * ```astro
@@ -214,6 +215,21 @@ export interface AstroGlobal extends AstroGlobalPartial {
 		 * }
 		 * ---
 		 * <Fragment set:html={html} />
+		 * ```
+		 *
+		 * A second parameters can be used to pass arguments to a slotted callback
+		 *
+		 * Example usage:
+		 * ```astro
+		 * ---
+		 * html = await Astro.slots.render('default', ["Hello", "World"])
+		 * ---
+		 * ```
+		 * Each item in the array will be passed as an argument that you can use like so:
+		 * ```astro
+		 * <Component>
+		 *		{(hello, world) => <div>{hello}, {world}!</div>}
+		 * </Component>
 		 * ```
 		 *
 		 * [Astro reference](https://docs.astro.build/en/reference/api-reference/#astroslots)
@@ -241,7 +257,7 @@ export interface AstroGlobalPartial {
 	 */
 	glob(globStr: `${any}.astro`): Promise<AstroInstance[]>;
 	glob<T extends Record<string, any>>(globStr: `${any}.md`): Promise<MarkdownInstance<T>[]>;
-	glob<T extends Record<string, any>>(globStr: `${any}.mdx`): Promise<MarkdownInstance<T>[]>;
+	glob<T extends Record<string, any>>(globStr: `${any}.mdx`): Promise<MDXInstance<T>[]>;
 	glob<T extends Record<string, any>>(globStr: string): Promise<T[]>;
 	/**
 	 * Returns a [URL](https://developer.mozilla.org/en-US/docs/Web/API/URL) object built from the [site](https://docs.astro.build/en/reference/configuration-reference/#site) config option
@@ -249,6 +265,16 @@ export interface AstroGlobalPartial {
 	 * [Astro reference](https://docs.astro.build/en/reference/api-reference/#astrosite)
 	 */
 	site: URL | undefined;
+	/**
+	 * Returns a string with the current version of Astro.
+	 *
+	 * Useful for using `<meta name="generator" content={Astro.generator} />` or crediting Astro in a site footer.
+	 *
+	 * [HTML Specification for `generator`](https://html.spec.whatwg.org/multipage/semantics.html#meta-generator)
+	 *
+	 * [Astro reference](https://docs.astro.build/en/reference/api-reference/#astrogenerator)
+	 */
+	generator: string;
 }
 
 type ServerConfig = {
@@ -403,7 +429,7 @@ export interface AstroUserConfig {
 	 * @name trailingSlash
 	 * @type {('always' | 'never' | 'ignore')}
 	 * @default `'ignore'`
-	 * @see buildOptions.pageUrlFormat
+	 * @see build.format
 	 * @description
 	 *
 	 * Set the route matching behavior of the dev server. Choose from the following options:
@@ -492,6 +518,13 @@ export interface AstroUserConfig {
 		 *   }
 		 * }
 		 * ```
+		 *
+		 * #### Effect on Astro.url
+		 * Setting `build.format` controls what `Astro.url` is set to during the build. When it is:
+		 * - `directory` - The `Astro.url.pathname` will include a trailing slash to mimic folder behavior; ie `/foo/`.
+		 * - `file` - The `Astro.url.pathname` will include `.html`; ie `/foo.html`.
+		 *
+		 * This means that when you create relative URLs using `new URL('./relative', Astro.url)`, you will get consistent behavior between dev and build.
 		 */
 		format?: 'file' | 'directory';
 	};
@@ -615,17 +648,19 @@ export interface AstroUserConfig {
 		 * @name markdown.remarkPlugins
 		 * @type {RemarkPlugins}
 		 * @description
-		 * Pass a custom [Remark](https://github.com/remarkjs/remark) plugin to customize how your Markdown is built.
+		 * Pass [remark plugins](https://github.com/remarkjs/remark) to customize how your Markdown is built. You can import and apply the plugin function (recommended), or pass the plugin name as a string.
 		 *
-		 * **Note:** Enabling custom `remarkPlugins` or `rehypePlugins` removes Astro's built-in support for [GitHub-flavored Markdown](https://github.github.com/gfm/) support and [Smartypants](https://github.com/silvenon/remark-smartypants). You must explicitly add these plugins to your `astro.config.mjs` file, if desired.
+		 * :::caution
+		 * Providing a list of plugins will **remove** our default plugins. To preserve these defaults, see the `extendDefaultPlugins` flag.
+		 * :::
 		 *
 		 * ```js
+		 * import remarkToc from 'remark-toc';
 		 * {
 		 *   markdown: {
-		 *     // Example: The default set of remark plugins used by Astro
-		 *     remarkPlugins: ['remark-gfm', 'remark-smartypants'],
-		 *   },
-		 * };
+		 *     remarkPlugins: [remarkToc]
+		 *   }
+		 * }
 		 * ```
 		 */
 		remarkPlugins?: RemarkPlugins;
@@ -634,20 +669,58 @@ export interface AstroUserConfig {
 		 * @name markdown.rehypePlugins
 		 * @type {RehypePlugins}
 		 * @description
-		 * Pass a custom [Rehype](https://github.com/remarkjs/remark-rehype) plugin to customize how your Markdown is built.
+		 * Pass [rehype plugins](https://github.com/remarkjs/remark-rehype) to customize how your Markdown's output HTML is processed. You can import and apply the plugin function (recommended), or pass the plugin name as a string.
 		 *
-		 * **Note:** Enabling custom `remarkPlugins` or `rehypePlugins` removes Astro's built-in support for [GitHub-flavored Markdown](https://github.github.com/gfm/) support and [Smartypants](https://github.com/silvenon/remark-smartypants). You must explicitly add these plugins to your `astro.config.mjs` file, if desired.
+		 * :::caution
+		 * Providing a list of plugins will **remove** our default plugins. To preserve these defaults, see the `extendDefaultPlugins` flag.
+		 * :::
+		 *
+		 * ```js
+		 * import rehypeMinifyHtml from 'rehype-minify';
+		 * {
+		 *   markdown: {
+		 *     rehypePlugins: [rehypeMinifyHtml]
+		 *   }
+		 * }
+		 * ```
+		 */
+		rehypePlugins?: RehypePlugins;
+		/**
+		 * @docs
+		 * @name markdown.extendDefaultPlugins
+		 * @type {boolean}
+		 * @default `false`
+		 * @description
+		 * Astro applies the [GitHub-flavored Markdown](https://github.com/remarkjs/remark-gfm) and [Smartypants](https://github.com/silvenon/remark-smartypants) plugins by default. When adding your own remark or rehype plugins, you can preserve these defaults by setting the `extendDefaultPlugins` flag to `true`:
 		 *
 		 * ```js
 		 * {
 		 *   markdown: {
-		 *     // Example: The default set of rehype plugins used by Astro
-		 *     rehypePlugins: [],
+		 *     extendDefaultPlugins: true,
+		 * 		 remarkPlugins: [exampleRemarkPlugin],
+		 *     rehypePlugins: [exampleRehypePlugin],
+		 *   }
+		 * }
+		 * ```
+		 */
+		extendDefaultPlugins?: boolean;
+		/**
+		 * @docs
+		 * @name markdown.remarkRehype
+		 * @type {RemarkRehype}
+		 * @description
+		 * Pass options to [remark-rehype](https://github.com/remarkjs/remark-rehype#api).
+		 *
+		 * ```js
+		 * {
+		 *   markdown: {
+		 *     // Example: Translate the footnotes text to another language, here are the default English values
+		 *     remarkRehype: { footnoteLabel: "Footnotes", footnoteBackLabel: "Back to content"},
 		 *   },
 		 * };
 		 * ```
 		 */
-		rehypePlugins?: RehypePlugins;
+		remarkRehype?: RemarkRehype;
 	};
 
 	/**
@@ -669,7 +742,9 @@ export interface AstroUserConfig {
 	 * }
 	 * ```
 	 */
-	integrations?: Array<AstroIntegration | AstroIntegration[]>;
+	integrations?: Array<
+		AstroIntegration | (AstroIntegration | false | undefined | null)[] | false | undefined | null
+	>;
 
 	/**
 	 * @docs
@@ -724,6 +799,17 @@ export interface AstroUserConfig {
 		 * @description
 		 * Enable Astro's pre-v1.0 support for components and JSX expressions in `.md` Markdown files.
 		 * In Astro `1.0.0-rc`, this original behavior was removed as the default, in favor of our new [MDX integration](/en/guides/integrations-guide/mdx/).
+		 *
+		 * To enable this behavior, set `legacy.astroFlavoredMarkdown` to `true` in your [`astro.config.mjs` configuration file](/en/guides/configuring-astro/#the-astro-config-file).
+		 *
+		 * ```js
+		 * {
+		 *   legacy: {
+		 *     // Example: Add support for legacy Markdown features
+		 *     astroFlavoredMarkdown: true,
+		 *   },
+		 * }
+		 * ```
 		 */
 		astroFlavoredMarkdown?: boolean;
 	};
@@ -821,23 +907,44 @@ export interface AstroInstance {
 
 export interface MarkdownInstance<T extends Record<string, any>> {
 	frontmatter: T;
+	/** Absolute file path (e.g. `/home/user/projects/.../file.md`) */
 	file: string;
+	/** Browser URL for files under `/src/pages` (e.g. `/en/guides/markdown-content`) */
 	url: string | undefined;
+	/** Component to render content in `.astro` files. Usage: `<Content />` */
 	Content: AstroComponentFactory;
-	/** raw Markdown file content, excluding frontmatter */
+	/** raw Markdown file content, excluding layout HTML and YAML frontmatter */
 	rawContent(): string;
-	/** Markdown file compiled to valid Astro syntax. Queryable with most HTML parsing libraries */
-	compiledContent(): Promise<string>;
-	getHeadings(): Promise<MarkdownHeading[]>;
+	/** Markdown file compiled to HTML, excluding layout HTML */
+	compiledContent(): string;
+	/** List of headings (h1 -> h6) with associated metadata */
+	getHeadings(): MarkdownHeading[];
 	/** @deprecated Renamed to `getHeadings()` */
 	getHeaders(): void;
-	default: () => Promise<{
-		metadata: MarkdownMetadata;
-		frontmatter: MarkdownContent<T>;
-		$$metadata: Metadata;
-		default: AstroComponentFactory;
-	}>;
+	default: AstroComponentFactory;
 }
+
+export interface MDXInstance<T>
+	extends Omit<MarkdownInstance<T>, 'rawContent' | 'compiledContent'> {
+	/** MDX does not support rawContent! If you need to read the Markdown contents to calculate values (ex. reading time), we suggest injecting frontmatter via remark plugins. Learn more on our docs: https://docs.astro.build/en/guides/integrations-guide/mdx/#inject-frontmatter-via-remark-or-rehype-plugins */
+	rawContent: never;
+	/** MDX does not support compiledContent! If you need to read the HTML contents to calculate values (ex. reading time), we suggest injecting frontmatter via rehype plugins. Learn more on our docs: https://docs.astro.build/en/guides/integrations-guide/mdx/#inject-frontmatter-via-remark-or-rehype-plugins */
+	compiledContent: never;
+}
+
+export interface MarkdownLayoutProps<T extends Record<string, any>> {
+	frontmatter: {
+		file: MarkdownInstance<T>['file'];
+		url: MarkdownInstance<T>['url'];
+	} & T;
+	file: MarkdownInstance<T>['file'];
+	url: MarkdownInstance<T>['url'];
+	headings: MarkdownHeading[];
+	rawContent: MarkdownInstance<T>['rawContent'];
+	compiledContent: MarkdownInstance<T>['compiledContent'];
+}
+
+export type MDXLayoutProps<T> = Omit<MarkdownLayoutProps<T>, 'rawContent' | 'compiledContent'>;
 
 export type GetHydrateCallback = () => Promise<() => void | Promise<void>>;
 
@@ -1003,6 +1110,7 @@ export interface SSRLoadedRenderer extends AstroRenderer {
 		check: AsyncRendererComponentFn<boolean>;
 		renderToStaticMarkup: AsyncRendererComponentFn<{
 			html: string;
+			attrs?: Record<string, string>;
 		}>;
 	};
 }

@@ -1,6 +1,6 @@
 {
   "name": "astro",
-  "version": "1.0.0-rc.7",
+  "version": "1.1.2",
   "description": "Astro is a modern site builder with web best practices, performance, and DX front-of-mind.",
   "type": "module",
   "author": "withastro",
@@ -12,23 +12,29 @@
   },
   "bugs": "https://github.com/withastro/astro/issues",
   "homepage": "https://astro.build",
-  "types": "./dist/types/@types/astro.d.ts",
+  "types": "./dist/@types/astro.d.ts",
   "typesVersions": {
     "*": {
       "app": [
-        "./dist/types/core/app/index"
+        "./dist/core/app/index"
       ],
       "app/*": [
-        "./dist/types/core/app/*"
+        "./dist/core/app/*"
       ]
     }
   },
   "exports": {
-    ".": "./astro.js",
+    ".": {
+      "types": "./dist/@types/astro.d.ts",
+      "default": "./astro.js"
+    },
     "./env": "./env.d.ts",
     "./client": "./client.d.ts",
     "./client-base": "./client-base.d.ts",
+    "./import-meta": "./import-meta.d.ts",
     "./astro-jsx": "./astro-jsx.d.ts",
+    "./tsconfigs/*.json": "./tsconfigs/*",
+    "./tsconfigs/*": "./tsconfigs/*.json",
     "./jsx/*": "./dist/jsx/*",
     "./jsx-runtime": "./dist/jsx-runtime/index.js",
     "./config": "./config.mjs",
@@ -62,6 +68,7 @@
   },
   "files": [
     "components",
+    "tsconfigs",
     "dist",
     "astro.js",
     "config.d.ts",
@@ -69,6 +76,7 @@
     "env.d.ts",
     "client.d.ts",
     "client-base.d.ts",
+    "import-meta.d.ts",
     "astro-jsx.d.ts",
     "README.md",
     "vendor"
@@ -86,11 +94,11 @@
     "test:e2e:match": "playwright test -g"
   },
   "dependencies": {
-    "@astrojs/compiler": "^0.23.1",
-    "@astrojs/language-server": "^0.20.0",
-    "@astrojs/markdown-remark": "^0.14.1",
-    "@astrojs/telemetry": "^0.4.1",
-    "@astrojs/webapi": "^0.12.0",
+    "@astrojs/compiler": "^0.23.4",
+    "@astrojs/language-server": "^0.23.0",
+    "@astrojs/markdown-remark": "^1.1.1",
+    "@astrojs/telemetry": "^1.0.0",
+    "@astrojs/webapi": "^1.0.0",
     "@babel/core": "^7.18.2",
     "@babel/generator": "^7.18.2",
     "@babel/parser": "^7.18.4",
@@ -127,9 +135,9 @@
     "recast": "^0.20.5",
     "rehype": "^12.0.1",
     "resolve": "^1.22.0",
-    "rollup": "^2.75.6",
+    "rollup": "~2.77.0",
     "semver": "^7.3.7",
-    "shiki": "^0.10.1",
+    "shiki": "^0.11.1",
     "sirv": "^2.0.2",
     "slash": "^4.0.0",
     "string-width": "^5.1.2",
@@ -138,7 +146,7 @@
     "tsconfig-resolver": "^3.0.1",
     "unist-util-visit": "^4.1.0",
     "vfile": "^5.3.2",
-    "vite": "3.0.4",
+    "vite": "3.0.9",
     "yargs-parser": "^21.0.1",
     "zod": "^3.17.3"
   },

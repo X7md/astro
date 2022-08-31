@@ -7,6 +7,7 @@ This **[Astro integration][astro-integration]** makes it easy to optimize images
 - <strong>[Why `@astrojs/image`?](#why-astrojsimage)</strong>
 - <strong>[Installation](#installation)</strong>
 - <strong>[Usage](#usage)</strong>
+- <strong>[Debugging](#debugging)</strong>
 - <strong>[Configuration](#configuration)</strong>
 - <strong>[Examples](#examples)</strong>
 - <strong>[Troubleshooting](#troubleshooting)</strong>
@@ -21,27 +22,25 @@ This integration provides `<Image />` and `<Picture>` components as well as a ba
 
 ## Installation
 
-<details>
-  <summary>Quick Install</summary>
+
+ ### Quick Install
   
 The `astro add` command-line tool automates the installation for you. Run one of the following commands in a new terminal window. (If you aren't sure which package manager you're using, run the first command.) Then, follow the prompts, and type "y" in the terminal (meaning "yes") for each one.
-  
-  ```sh
-  # Using NPM
-  npx astro add image
-  # Using Yarn
-  yarn astro add image
-  # Using PNPM
-  pnpx astro add image
-  ```
+   
+```sh
+# Using NPM
+npm run astro add image
+# Using Yarn
+yarn astro add image
+# Using PNPM
+pnpm astro add image
+```
   
 Then, restart the dev server by typing `CTRL-C` and then `npm run astro dev` in the terminal window that was running Astro.
   
 Because this command is new, it might not properly set things up. If that happens, [feel free to log an issue on our GitHub](https://github.com/withastro/astro/issues) and try the manual installation steps below.
-</details>
 
-<details>
-  <summary>Manual Install</summary>
+ ### Manual Install
   
 First, install the `@astrojs/image` package using your package manager. If you're using npm or aren't sure, run this in the terminal:
 ```sh
@@ -58,14 +57,19 @@ export default {
   // ...
   integrations: [image()],
 }
-```
-  
+``` 
 Then, restart the dev server.
-</details>
 
-### Update `tsconfig.json`
+### Update `env.d.ts`
 
-For the best development experience, add the integrations type definitions to your project's `tsconfig.json` file.
+For the best development experience, add the integrations type definitions to your project's `env.d.ts` file.
+
+```typescript
+// Replace `astro/client` with `@astrojs/image/client`
+/// <reference types="@astrojs/image/client" />
+```
+
+Or, alternatively if your project is using the types through a `tsconfig.json`
 
 ```json
 {
@@ -77,6 +81,12 @@ For the best development experience, add the integrations type definitions to yo
 ```
 
 ## Usage
+
+```astro title="src/pages/index.astro"
+---
+import { Image, Picture } from '@astrojs/image/components';
+---
+```
 
 The included `sharp` transformer supports resizing images and encoding them to different image formats. Third-party image services will be able to add support for custom transformations as well (ex: `blur`, `filter`, `rotate`, etc).
 
@@ -96,7 +106,11 @@ In addition to the component-specific properties, any valid HTML attribute for t
 
 Source for the original image file.
 
-For images in your project's repository, use the `src` relative to the `public` directory. For remote images, provide the full URL.
+For images located in your project's `src`: use the file path relative to the `src` directory. (e.g. `src="../assets/source-pic.png"`)
+
+ For images located in your `public` directory: use the URL path relative to the `public` directory. (e.g. `src="/images/public-image.jpg"`)
+
+For remote images, provide the full URL. (e.g. `src="https://astro.build/assets/blog/astro-1-release-update.avif"`)
 
 #### format
 
@@ -172,7 +186,7 @@ A `number` can also be provided, useful when the aspect ratio is calculated at b
 
 Source for the original image file.
 
-For images in your project's repository, use the `src` relative to the `public` directory. For remote images, provide the full URL.
+For images in your project's repository, use the path relative to the `src` or `public` directory. For remote images, provide the full URL.
 
 #### alt
 
@@ -225,6 +239,8 @@ A `string` can be provided in the form of `{width}:{height}`, ex: `16:9` or `3:4
 
 A `number` can also be provided, useful when the aspect ratio is calculated at build time. This can be an inline number such as `1.777` or inlined as a JSX expression like `aspectRatio={16/9}`.
 
+#### formats
+
 <p>
 
 **Type:** `Array<'avif' | 'jpeg' | 'png' | 'webp'>`<br>
@@ -239,7 +255,7 @@ This is the helper function used by the `<Image />` component to build `<img />`
 
 This helper takes in an object with the same properties as the `<Image />` component and returns an object with attributes that should be included on the final `<img />` element.
 
-This can helpful if you need to add preload links to a page's `<head>`.
+This can be helpful if you need to add preload links to a page's `<head>`.
 
 ```astro
 ---
@@ -263,16 +279,14 @@ This helper takes in an object with the same properties as the `<Picture />` com
 
 ## Configuration
 
-The intergration can be configured to run with a different image service, either a hosted image service or a full image transformer that runs locally in your build or SSR deployment.
+The integration can be configured to run with a different image service, either a hosted image service or a full image transformer that runs locally in your build or SSR deployment.
 
 > During development, local images may not have been published yet and would not be available to hosted image services. Local images will always use the built-in `sharp` service when using `astro dev`.
 
-There are currently no other configuration options for the `@astrojs/image` integration. Please [open an issue](https://github.com/withastro/astro/issues/new/choose) if you have a compelling use case to share.
 
-<details>
-  <summary><strong>config.serviceEntryPoint</strong></summary>
+ ### config.serviceEntryPoint
   
-  The `serviceEntryPoint` should resolve to the image service installed from NPM. The default entry point is `@astrojs/image/sharp`, which resolves to the entry point exported from this integration's `package.json`.
+The `serviceEntryPoint` should resolve to the image service installed from NPM. The default entry point is `@astrojs/image/sharp`, which resolves to the entry point exported from this integration's `package.json`.
 
 ```js
 // astro.config.mjs
@@ -285,14 +299,29 @@ export default {
   })],
 }
 ```
-</details>
+
+### config.logLevel
+
+The `logLevel` controls can be used to control how much detail is logged by the integration during builds. This may be useful to track down a specific image or transformation that is taking a long time to build.
+
+```js
+// astro.config.mjs
+import image from '@astrojs/image';
+
+export default {
+  integrations: [image({
+    // supported levels: 'debug' | 'info' | 'warn' | 'error' | 'silent'
+    // default: 'info'
+    logLevel: 'debug'
+  })],
+}
+```
 
 ## Examples
 
-<details>
-  <summary><strong>Local images</strong></summary>
+### Local images
   
-  Image files in your project's `src` directory can be imported in frontmatter and passed directly to the `<Image />` component. All other properties are optional and will default to the original image file's properties if not provided.
+Image files in your project's `src` directory can be imported in frontmatter and passed directly to the `<Image />` component. All other properties are optional and will default to the original image file's properties if not provided.
 
 ```astro
 ---
@@ -315,12 +344,28 @@ import heroImage from '../assets/hero.png';
 // image imports can also be inlined directly
 <Image src={import('../assets/hero.png')} />
 ```
-</details>
 
-<details>
-  <summary><strong>Remote images</strong></summary>
+#### Images in `/public`
+
+Files in the `/public` directory are always served or copied as-is, with no processing. We recommend that local images are always kept in `src/` so that Astro can transform, optimize and bundle them. But if you absolutely must keep an image in `public/`, use its relative URL path as the image's `src=` attribute. It will be treated as a remote image, which requires an `aspectRatio` attribute.
+
+Alternatively, you can import an image from your `public/` directory in your frontmatter and use a variable in your `src=` attribute. You cannot, however, import this directly inside the component as its `src` value. 
+
+For example, use an image located at `public/social.png` in either static or SSR builds like so:
+
+```astro title="src/pages/page.astro"
+---
+import { Image } from '@astrojs/image/components';
+import socialImage from '/social.png'; 
+---
+// In static builds: the image will be built and optimized to `/dist`.
+// In SSR builds: the image will be optimized by the server when requested by a browser.
+<Image src={socialImage} width={1280} aspectRatio="16:9" />
+```
+
+### Remote images
   
-  Remote images can be transformed with the `<Image />` component. The `<Image />` component needs to know the final dimensions for the `<img />` element to avoid content layout shifts. For remote images, this means you must either provide `width` and `height`, or one of the dimensions plus the required `aspectRatio`.
+Remote images can be transformed with the `<Image />` component. The `<Image />` component needs to know the final dimensions for the `<img />` element to avoid content layout shifts. For remote images, this means you must either provide `width` and `height`, or one of the dimensions plus the required `aspectRatio`.
 
 ```astro
 ---
@@ -338,16 +383,14 @@ const imageUrl = 'https://www.google.com/images/branding/googlelogo/2x/googlelog
 // cropping to a specific height and aspect ratio and converting to an avif format
 <Image src={imageUrl} height={200} aspectRatio="16:9" format="avif" />
 ```
-</details>
 
-<details>
-<summary><strong>Responsive pictures</strong></summary>
+### Responsive pictures
 
-  The `<Picture />` component can be used to automatically build a `<picture>` with multiple sizes and formats. Check out [MDN](https://developer.mozilla.org/en-US/docs/Learn/HTML/Multimedia_and_embedding/Responsive_images#art_direction) for a deep dive into responsive images and art direction.
+The `<Picture />` component can be used to automatically build a `<picture>` with multiple sizes and formats. Check out [MDN](https://developer.mozilla.org/en-US/docs/Learn/HTML/Multimedia_and_embedding/Responsive_images#art_direction) for a deep dive into responsive images and art direction.
 
-  By default, the picture will include formats for `avif` and `webp` in addition to the image's original format.
+By default, the picture will include formats for `avif` and `webp` in addition to the image's original format.
 
-  For remote images, an `aspectRatio` is required to ensure the correct `height` can be calculated at build time.
+For remote images, an `aspectRatio` is required to ensure the correct `height` can be calculated at build time.
 
 ```astro
 ---
@@ -367,11 +410,8 @@ const imageUrl = 'https://www.google.com/images/branding/googlelogo/2x/googlelog
 <Picture src={import("../assets/hero.png")} widths={[200, 400, 800]} sizes="(max-width: 800px) 100vw, 800px" alt="My hero image" />
 ```
 
-</details>
-
 ## Troubleshooting
 - If your installation doesn't seem to be working, make sure to restart the dev server.
-- If you edit and save a file and don't see your site update accordingly, try refreshing the page.
 - If you edit and save a file and don't see your site update accordingly, try refreshing the page.
 - If refreshing the page doesn't update your preview, or if a new installation doesn't seem to be working, then restart the dev server.
 

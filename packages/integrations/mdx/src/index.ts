@@ -1,91 +1,55 @@
-import { compile as mdxCompile, nodeTypes } from '@mdx-js/mdx';
+import { compile as mdxCompile } from '@mdx-js/mdx';
 import mdxPlugin, { Options as MdxRollupPluginOptions } from '@mdx-js/rollup';
-import type { AstroConfig, AstroIntegration } from 'astro';
+import type { AstroIntegration } from 'astro';
 import { parse as parseESM } from 'es-module-lexer';
-import rehypeRaw from 'rehype-raw';
-import remarkGfm from 'remark-gfm';
-import type { RemarkMdxFrontmatterOptions } from 'remark-mdx-frontmatter';
-import remarkShikiTwoslash from 'remark-shiki-twoslash';
-import remarkSmartypants from 'remark-smartypants';
+import { blue, bold } from 'kleur/colors';
 import { VFile } from 'vfile';
 import type { Plugin as VitePlugin } from 'vite';
-import { rehypeApplyFrontmatterExport, remarkInitializeAstroData } from './astro-data-utils.js';
-import rehypeCollectHeadings from './rehype-collect-headings.js';
-import remarkPrism from './remark-prism.js';
-import { getFileInfo, parseFrontmatter } from './utils.js';
+import { rehypeApplyFrontmatterExport } from './astro-data-utils.js';
+import type { MdxOptions } from './utils.js';
+import {
+	getFileInfo,
+	getRehypePlugins,
+	getRemarkPlugins,
+	handleExtendsNotSupported,
+	parseFrontmatter,
+} from './utils.js';
 
-type WithExtends<T> = T | { extends: T };
+const RAW_CONTENT_ERROR =
+	'MDX does not support rawContent()! If you need to read the Markdown contents to calculate values (ex. reading time), we suggest injecting frontmatter via remark plugins. Learn more on our docs: https://docs.astro.build/en/guides/integrations-guide/mdx/#inject-frontmatter-via-remark-or-rehype-plugins';
 
-type MdxOptions = {
-	remarkPlugins?: WithExtends<MdxRollupPluginOptions['remarkPlugins']>;
-	rehypePlugins?: WithExtends<MdxRollupPluginOptions['rehypePlugins']>;
-	/**
-	 * Configure the remark-mdx-frontmatter plugin
-	 * @see https://github.com/remcohaszing/remark-mdx-frontmatter#options for a full list of options
-	 * @default {{ name: 'frontmatter' }}
-	 */
-	frontmatterOptions?: RemarkMdxFrontmatterOptions;
-};
-
-const DEFAULT_REMARK_PLUGINS: MdxRollupPluginOptions['remarkPlugins'] = [
-	remarkGfm,
-	remarkSmartypants,
-];
-const DEFAULT_REHYPE_PLUGINS: MdxRollupPluginOptions['rehypePlugins'] = [];
-
-function handleExtends<T>(config: WithExtends<T[] | undefined>, defaults: T[] = []): T[] {
-	if (Array.isArray(config)) return config;
-
-	return [...defaults, ...(config?.extends ?? [])];
-}
-
-function getRemarkPlugins(
-	mdxOptions: MdxOptions,
-	config: AstroConfig
-): MdxRollupPluginOptions['remarkPlugins'] {
-	let remarkPlugins = [
-		// Initialize vfile.data.astroExports before all plugins are run
-		remarkInitializeAstroData,
-		...handleExtends(mdxOptions.remarkPlugins, DEFAULT_REMARK_PLUGINS),
-	];
-	if (config.markdown.syntaxHighlight === 'shiki') {
-		// Default export still requires ".default" chaining for some reason
-		// Workarounds tried:
-		// - "import * as remarkShikiTwoslash"
-		// - "import { default as remarkShikiTwoslash }"
-		const shikiTwoslash = (remarkShikiTwoslash as any).default ?? remarkShikiTwoslash;
-		remarkPlugins.push([shikiTwoslash, config.markdown.shikiConfig]);
-	}
-	if (config.markdown.syntaxHighlight === 'prism') {
-		remarkPlugins.push(remarkPrism);
-	}
-	return remarkPlugins;
-}
-
-function getRehypePlugins(
-	mdxOptions: MdxOptions,
-	config: AstroConfig
-): MdxRollupPluginOptions['rehypePlugins'] {
-	let rehypePlugins = handleExtends(mdxOptions.rehypePlugins, DEFAULT_REHYPE_PLUGINS);
-
-	if (config.markdown.syntaxHighlight === 'shiki' || config.markdown.syntaxHighlight === 'prism') {
-		rehypePlugins.push([rehypeRaw, { passThrough: nodeTypes }]);
-	}
-	// getHeadings() is guaranteed by TS, so we can't allow user to override
-	rehypePlugins.push(rehypeCollectHeadings);
-
-	return rehypePlugins;
-}
+const COMPILED_CONTENT_ERROR =
+	'MDX does not support compiledContent()! If you need to read the HTML contents to calculate values (ex. reading time), we suggest injecting frontmatter via rehype plugins. Learn more on our docs: https://docs.astro.build/en/guides/integrations-guide/mdx/#inject-frontmatter-via-remark-or-rehype-plugins';
 
 export default function mdx(mdxOptions: MdxOptions = {}): AstroIntegration {
 	return {
 		name: '@astrojs/mdx',
 		hooks: {
-			'astro:config:setup': ({ updateConfig, config, addPageExtension, command }: any) => {
+			'astro:config:setup': async ({ updateConfig, config, addPageExtension, command }: any) => {
 				addPageExtension('.mdx');
+				mdxOptions.extendPlugins ??= 'markdown';
+
+				handleExtendsNotSupported(mdxOptions.remarkPlugins);
+				handleExtendsNotSupported(mdxOptions.rehypePlugins);
+
+				// TODO: remove for 1.0. Shipping to ease migration to new minor
+				if (
+					mdxOptions.extendPlugins === 'markdown' &&
+					(config.markdown.rehypePlugins?.length || config.markdown.remarkPlugins?.length)
+				) {
+					console.log(
+						blue(`[MDX] Now inheriting remark and rehype plugins from "markdown" config.`)
+					);
+					console.log(
+						`If you applied a plugin to both your Markdown and MDX configs, we suggest ${bold(
+							'removing the duplicate MDX entry.'
+						)}`
+					);
+					console.log(`See "extendPlugins" option to configure this behavior.`);
+				}
 
 				const mdxPluginOpts: MdxRollupPluginOptions = {
-					remarkPlugins: getRemarkPlugins(mdxOptions, config),
+					remarkPlugins: await getRemarkPlugins(mdxOptions, config),
 					rehypePlugins: getRehypePlugins(mdxOptions, config),
 					jsx: true,
 					jsxImportSource: 'astro',
@@ -105,25 +69,12 @@ export default function mdx(mdxOptions: MdxOptions = {}): AstroIntegration {
 								async transform(code, id) {
 									if (!id.endsWith('mdx')) return;
 
-									let { data: frontmatter, content: pageContent } = parseFrontmatter(code, id);
-									if (frontmatter.layout) {
-										const { layout, ...contentProp } = frontmatter;
-										pageContent += `\n\nexport default async function({ children }) {\nconst Layout = (await import(${JSON.stringify(
-											frontmatter.layout
-										)})).default;\nconst frontmatter=${JSON.stringify(
-											contentProp
-										)};\nreturn <Layout frontmatter={frontmatter} content={frontmatter} headings={getHeadings()}>{children}</Layout> }`;
-									}
-
+									const { data: frontmatter, content: pageContent } = parseFrontmatter(code, id);
 									const compiled = await mdxCompile(new VFile({ value: pageContent, path: id }), {
 										...mdxPluginOpts,
 										rehypePlugins: [
 											...(mdxPluginOpts.rehypePlugins ?? []),
-											() =>
-												rehypeApplyFrontmatterExport(
-													frontmatter,
-													mdxOptions.frontmatterOptions?.name
-												),
+											() => rehypeApplyFrontmatterExport(frontmatter),
 										],
 									});
 
@@ -138,6 +89,11 @@ export default function mdx(mdxOptions: MdxOptions = {}): AstroIntegration {
 								// These transforms must happen *after* JSX runtime transformations
 								transform(code, id) {
 									if (!id.endsWith('.mdx')) return;
+
+									// Ensures styles and scripts are injected into a `<head>`
+									// When a layout is not applied
+									code += `\nMDXContent[Symbol.for('astro.needsHeadRendering')] = !Boolean(frontmatter.layout);`;
+
 									const [, moduleExports] = parseESM(code);
 
 									const { fileUrl, fileId } = getFileInfo(id, config);
@@ -146,6 +102,19 @@ export default function mdx(mdxOptions: MdxOptions = {}): AstroIntegration {
 									}
 									if (!moduleExports.includes('file')) {
 										code += `\nexport const file = ${JSON.stringify(fileId)};`;
+									}
+									if (!moduleExports.includes('rawContent')) {
+										code += `\nexport function rawContent() { throw new Error(${JSON.stringify(
+											RAW_CONTENT_ERROR
+										)}) };`;
+									}
+									if (!moduleExports.includes('compiledContent')) {
+										code += `\nexport function compiledContent() { throw new Error(${JSON.stringify(
+											COMPILED_CONTENT_ERROR
+										)}) };`;
+									}
+									if (!moduleExports.includes('Content')) {
+										code += `\nexport const Content = MDXContent;`;
 									}
 
 									if (command === 'dev') {

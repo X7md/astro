@@ -1,5 +1,35 @@
 # @astrojs/react
 
+## 1.1.1
+
+### Patch Changes
+
+- [#4527](https://github.com/withastro/astro/pull/4527) [`9adb7cca3`](https://github.com/withastro/astro/commit/9adb7cca33f669082d0daf750b97b1496ee79d2f) Thanks [@bluwy](https://github.com/bluwy)! - Add vite-ignore comment to suppress unknown import warnings
+
+## 1.1.0
+
+### Minor Changes
+
+- [#4478](https://github.com/withastro/astro/pull/4478) [`243525b15`](https://github.com/withastro/astro/commit/243525b1565385753ae1464c5def0d7de799f906) Thanks [@matthewp](https://github.com/matthewp)! - Uses startTransition on React roots
+
+  This prevents hydration from blocking the main thread when multiple islands are rendering at the same time.
+
+## 1.1.0-next.0
+
+### Minor Changes
+
+- [#4478](https://github.com/withastro/astro/pull/4478) [`243525b15`](https://github.com/withastro/astro/commit/243525b1565385753ae1464c5def0d7de799f906) Thanks [@matthewp](https://github.com/matthewp)! - Uses startTransition on React roots
+
+  This prevents hydration from blocking the main thread when multiple islands are rendering at the same time.
+
+## 1.0.0
+
+### Major Changes
+
+- [`04ad44563`](https://github.com/withastro/astro/commit/04ad445632c67bdd60c1704e1e0dcbcaa27b9308) - > Astro v1.0 is out! Read the [official announcement post](https://astro.build/blog/astro-1/).
+
+  **No breaking changes**. This package is now officially stable and compatible with `astro@1.0.0`!
+
 ## 0.4.3
 
 ### Patch Changes

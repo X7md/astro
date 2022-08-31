@@ -1,4 +1,4 @@
-import type { RehypePlugin, RemarkPlugin } from '@astrojs/markdown-remark';
+import type { RehypePlugin, RemarkPlugin, RemarkRehype } from '@astrojs/markdown-remark';
 import type * as Postcss from 'postcss';
 import type { ILanguageRegistration, IThemeRegistration, Theme } from 'shiki';
 import type { Arguments as Flags } from 'yargs-parser';
@@ -51,6 +51,7 @@ const ASTRO_CONFIG_DEFAULTS: AstroUserConfig & any = {
 		},
 		remarkPlugins: [],
 		rehypePlugins: [],
+		remarkRehype: {},
 	},
 	vite: {},
 	legacy: {
@@ -214,6 +215,11 @@ export const AstroConfigSchema = z.object({
 				])
 				.array()
 				.default(ASTRO_CONFIG_DEFAULTS.markdown.rehypePlugins),
+			remarkRehype: z
+				.custom<RemarkRehype>((data) => data instanceof Object && !Array.isArray(data))
+				.optional()
+				.default(ASTRO_CONFIG_DEFAULTS.markdown.remarkRehype),
+			extendDefaultPlugins: z.boolean().default(false),
 		})
 		.default({}),
 	vite: z
@@ -363,7 +369,7 @@ function resolveFlags(flags: Partial<Flags>): CLIFlags {
 		config: typeof flags.config === 'string' ? flags.config : undefined,
 		host:
 			typeof flags.host === 'string' || typeof flags.host === 'boolean' ? flags.host : undefined,
-		drafts: typeof flags.drafts === 'boolean' ? flags.drafts : false,
+		drafts: typeof flags.drafts === 'boolean' ? flags.drafts : undefined,
 	};
 }
 

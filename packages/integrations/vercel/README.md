@@ -12,7 +12,7 @@ This adapter allows Astro to deploy your SSR site to [Vercel](https://www.vercel
 
 ## Why Astro Vercel
 
-If you're using Astro as a static site builder—its behavior out of the box—you don't need an adapter.
+If you're using Astro as a static site builder — its behavior out of the box — you don't need an adapter. 
 
 If you wish to [use server-side rendering (SSR)](https://docs.astro.build/en/guides/server-side-rendering/), Astro requires an adapter that matches your deployment runtime.
 

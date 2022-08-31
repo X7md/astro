@@ -1,5 +1,19 @@
 # @astrojs/lit
 
+## 1.0.1
+
+### Patch Changes
+
+- [#4503](https://github.com/withastro/astro/pull/4503) [`1222ab954`](https://github.com/withastro/astro/commit/1222ab9540d17e4e7e811240b8a2a039acc333cb) Thanks [@matthewp](https://github.com/matthewp)! - Allow using Lit's decorators
+
+## 1.0.0
+
+### Major Changes
+
+- [`04ad44563`](https://github.com/withastro/astro/commit/04ad445632c67bdd60c1704e1e0dcbcaa27b9308) - > Astro v1.0 is out! Read the [official announcement post](https://astro.build/blog/astro-1/).
+
+  **No breaking changes**. This package is now officially stable and compatible with `astro@1.0.0`!
+
 ## 0.3.2
 
 ### Patch Changes

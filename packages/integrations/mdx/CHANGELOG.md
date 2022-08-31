@@ -1,5 +1,86 @@
 # @astrojs/mdx
 
+## 0.10.3
+
+### Patch Changes
+
+- [#4519](https://github.com/withastro/astro/pull/4519) [`a2e8e76c3`](https://github.com/withastro/astro/commit/a2e8e76c303e8d6f39c24c122905a10f06907997) Thanks [@JuanM04](https://github.com/JuanM04)! - Upgraded Shiki to v0.11.1
+
+- [#4530](https://github.com/withastro/astro/pull/4530) [`8504cd79b`](https://github.com/withastro/astro/commit/8504cd79b708e0d3bf1a2bb4ff9b86936bdd692b) Thanks [@kylebutts](https://github.com/kylebutts)! - Add custom components to README
+
+## 0.10.2
+
+### Patch Changes
+
+- [#4423](https://github.com/withastro/astro/pull/4423) [`d4cd7a59f`](https://github.com/withastro/astro/commit/d4cd7a59fd38d411c442a818cfaab40f74106628) Thanks [@bholmesdev](https://github.com/bholmesdev)! - Update Markdown type signature to match new markdown plugin,and update top-level layout props for better alignment
+
+## 0.10.2-next.0
+
+### Patch Changes
+
+- [#4423](https://github.com/withastro/astro/pull/4423) [`d4cd7a59f`](https://github.com/withastro/astro/commit/d4cd7a59fd38d411c442a818cfaab40f74106628) Thanks [@bholmesdev](https://github.com/bholmesdev)! - Update Markdown type signature to match new markdown plugin,and update top-level layout props for better alignment
+
+## 0.10.1
+
+### Patch Changes
+
+- [#4443](https://github.com/withastro/astro/pull/4443) [`adb207979`](https://github.com/withastro/astro/commit/adb20797962c280d4d38f335f577fd52a1b48d4b) Thanks [@bholmesdev](https://github.com/bholmesdev)! - Fix MDX style imports when layout is not applied
+
+* [#4428](https://github.com/withastro/astro/pull/4428) [`a2414bf59`](https://github.com/withastro/astro/commit/a2414bf59e2e2cd633aece68e724401c4ad281b9) Thanks [@bholmesdev](https://github.com/bholmesdev)! - Fix dev server reload performance when globbing from an MDX layout
+
+## 0.10.0
+
+### Minor Changes
+
+- [#4292](https://github.com/withastro/astro/pull/4292) [`f1a52c18a`](https://github.com/withastro/astro/commit/f1a52c18afe66e6d310743ae6884be76f69be265) Thanks [@bholmesdev](https://github.com/bholmesdev)! - Switch from Shiki Twoslash to Astro's Shiki Markdown highlighter
+
+## 0.9.0
+
+### Minor Changes
+
+- [#4268](https://github.com/withastro/astro/pull/4268) [`f7afdb889`](https://github.com/withastro/astro/commit/f7afdb889fe4e97177958c8ec92f80c5f6e5cb51) Thanks [@bholmesdev](https://github.com/bholmesdev)! - Align MD with MDX on layout props and "glob" import results:
+  - Add `Content` to MDX
+  - Add `file` and `url` to MDX frontmatter (layout import only)
+  - Update glob types to reflect differences (lack of `rawContent` and `compiledContent`)
+
+### Patch Changes
+
+- [#4272](https://github.com/withastro/astro/pull/4272) [`24d2f7a6e`](https://github.com/withastro/astro/commit/24d2f7a6e6700c10c863f826f37bb653d70e3a83) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Properly handle hydration for namespaced components
+
+## 0.8.3
+
+### Patch Changes
+
+- [#4248](https://github.com/withastro/astro/pull/4248) [`869d00935`](https://github.com/withastro/astro/commit/869d0093596b709cfcc1a1a95ee631b48d6d1c26) Thanks [@svemat01](https://github.com/svemat01)! - Load builtin rehype plugins before user plugins instead of after
+
+* [#4255](https://github.com/withastro/astro/pull/4255) [`411612808`](https://github.com/withastro/astro/commit/4116128082121ee276d51cb245bf8095be4728a1) Thanks [@bholmesdev](https://github.com/bholmesdev)! - Pass injected frontmatter from remark and rehype plugins to layouts
+
+* Updated dependencies [[`1f0dd31d9`](https://github.com/withastro/astro/commit/1f0dd31d9239b5e3dca99c88d021e7a9a3e2054d)]:
+  - @astrojs/prism@1.0.1
+
+## 0.8.2
+
+### Patch Changes
+
+- [#4237](https://github.com/withastro/astro/pull/4237) [`9d5ab5508`](https://github.com/withastro/astro/commit/9d5ab55086964fbede17da3d78c209c6d8d13711) Thanks [@bholmesdev](https://github.com/bholmesdev)! - Update "Astro.props.content" -> "Astro.props.frontmatter" in README
+
+## 0.8.1
+
+### Patch Changes
+
+- Updated dependencies [[`04ad44563`](https://github.com/withastro/astro/commit/04ad445632c67bdd60c1704e1e0dcbcaa27b9308)]:
+  - @astrojs/prism@1.0.0
+
+## 0.8.0
+
+### Minor Changes
+
+- [#4204](https://github.com/withastro/astro/pull/4204) [`4c2ca5352`](https://github.com/withastro/astro/commit/4c2ca5352d0c4119ed2a9e5e0b78ce71eb1b414a) Thanks [@bholmesdev](https://github.com/bholmesdev)! - Remove `frontmatterOptions` from MDX config
+
+### Patch Changes
+
+- [#4205](https://github.com/withastro/astro/pull/4205) [`6c9736cbc`](https://github.com/withastro/astro/commit/6c9736cbc90162f1de3ebccd7cfe98332749b639) Thanks [@bholmesdev](https://github.com/bholmesdev)! - Add frontmatter injection instructions to README
+
 ## 0.7.0
 
 ### Minor Changes

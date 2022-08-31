@@ -96,11 +96,8 @@ Example:
 
 	timer.generate = performance.now();
 	if (astroConfig.output === 'static') {
-		try {
-			await generatePages(opts, internals);
-		} finally {
-			await cleanSsrOutput(opts);
-		}
+		await generatePages(opts, internals);
+		await cleanSsrOutput(opts);
 	} else {
 		// Inject the manifest
 		await injectManifest(opts, internals);
@@ -116,19 +113,16 @@ async function ssrBuild(opts: StaticBuildOptions, internals: BuildInternals, inp
 	const out = ssr ? opts.buildConfig.server : astroConfig.outDir;
 
 	const viteBuildConfig: ViteConfigWithSSR = {
+		...viteConfig,
 		logLevel: opts.viteConfig.logLevel ?? 'error',
 		mode: 'production',
-		css: viteConfig.css,
-		optimizeDeps: {
-			include: [...(viteConfig.optimizeDeps?.include ?? [])],
-			exclude: [...(viteConfig.optimizeDeps?.exclude ?? [])],
-		},
 		build: {
 			...viteConfig.build,
 			emptyOutDir: false,
 			manifest: false,
 			outDir: fileURLToPath(out),
 			rollupOptions: {
+				...viteConfig.build?.rollupOptions,
 				input: [],
 				output: {
 					format: 'esm',
@@ -138,7 +132,6 @@ async function ssrBuild(opts: StaticBuildOptions, internals: BuildInternals, inp
 					entryFileNames: opts.buildConfig.serverEntry,
 				},
 			},
-
 			ssr: true,
 			// must match an esbuild target
 			target: 'esnext',
@@ -163,12 +156,8 @@ async function ssrBuild(opts: StaticBuildOptions, internals: BuildInternals, inp
 			vitePluginAnalyzer(internals),
 		],
 		publicDir: ssr ? false : viteConfig.publicDir,
-		root: viteConfig.root,
 		envPrefix: 'PUBLIC_',
-		server: viteConfig.server,
 		base: astroConfig.base,
-		ssr: viteConfig.ssr,
-		resolve: viteConfig.resolve,
 	};
 
 	await runHookBuildSetup({
@@ -176,9 +165,9 @@ async function ssrBuild(opts: StaticBuildOptions, internals: BuildInternals, inp
 		pages: internals.pagesByComponent,
 		vite: viteBuildConfig,
 		target: 'server',
+		logging: opts.logging,
 	});
 
-	// TODO: use vite.mergeConfig() here?
 	return await vite.build(viteBuildConfig);
 }
 
@@ -202,22 +191,19 @@ async function clientBuild(
 		return null;
 	}
 
-	// TODO: use vite.mergeConfig() here?
 	info(opts.logging, null, `\n${bgGreen(black(' building client '))}`);
 
 	const viteBuildConfig = {
+		...viteConfig,
 		logLevel: 'info',
 		mode: 'production',
-		css: viteConfig.css,
-		optimizeDeps: {
-			include: [...(viteConfig.optimizeDeps?.include ?? [])],
-			exclude: [...(viteConfig.optimizeDeps?.exclude ?? [])],
-		},
 		build: {
+			...viteConfig.build,
 			emptyOutDir: false,
 			minify: 'esbuild',
 			outDir: fileURLToPath(out),
 			rollupOptions: {
+				...viteConfig.build?.rollupOptions,
 				input: Array.from(input),
 				output: {
 					format: 'esm',
@@ -241,10 +227,7 @@ async function clientBuild(
 			}),
 			...(viteConfig.plugins || []),
 		],
-		publicDir: viteConfig.publicDir,
-		root: viteConfig.root,
 		envPrefix: 'PUBLIC_',
-		server: viteConfig.server,
 		base: astroConfig.base,
 	} as ViteConfigWithSSR;
 
@@ -253,6 +236,7 @@ async function clientBuild(
 		pages: internals.pagesByComponent,
 		vite: viteBuildConfig,
 		target: 'client',
+		logging: opts.logging,
 	});
 
 	const buildResult = await vite.build(viteBuildConfig);

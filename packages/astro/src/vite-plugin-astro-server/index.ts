@@ -28,20 +28,6 @@ interface AstroPluginOptions {
 	logging: LogOptions;
 }
 
-const BAD_VITE_MIDDLEWARE = [
-	'viteIndexHtmlMiddleware',
-	'vite404Middleware',
-	'viteSpaFallbackMiddleware',
-];
-function removeViteHttpMiddleware(server: vite.Connect.Server) {
-	for (let i = server.stack.length - 1; i > 0; i--) {
-		// @ts-expect-error using internals until https://github.com/vitejs/vite/pull/4640 is merged
-		if (BAD_VITE_MIDDLEWARE.includes(server.stack[i].handle.name)) {
-			server.stack.splice(i, 1);
-		}
-	}
-}
-
 function truncateString(str: string, n: number) {
 	if (str.length > n) {
 		return str.substring(0, n) + '&#8230;';
@@ -251,13 +237,6 @@ async function handleRequest(
 	async function matchRoute() {
 		const matches = matchAllRoutes(pathname, manifest);
 
-		if (config.output === 'server' && matches.length > 1) {
-			throw new Error(`Found multiple matching routes for "${pathname}"! When using \`output: 'server'\`, only one route in \`src/pages\` can match a given URL. Found:
-
-${matches.map(({ component }) => `- ${component}`).join('\n')}
-`);
-		}
-
 		for await (const maybeRoute of matches) {
 			const filePath = new URL(`./${maybeRoute.component}`, config.root);
 			const preloadedComponent = await preload({ astroConfig: config, filePath, viteServer });
@@ -352,7 +331,11 @@ ${matches.map(({ component }) => `- ${component}`).join('\n')}
 				await writeWebResponse(res, result.response);
 			} else {
 				let contentType = 'text/plain';
-				const computedMimeType = route.pathname ? mime.getType(route.pathname) : null;
+				// Dynamic routes don’t include `route.pathname`, so synthesise a path for these (e.g. 'src/pages/[slug].svg')
+				const filepath =
+					route.pathname ||
+					route.segments.map((segment) => segment.map((p) => p.content).join('')).join('/');
+				const computedMimeType = mime.getType(filepath);
 				if (computedMimeType) {
 					contentType = computedMimeType;
 				}
@@ -389,8 +372,6 @@ export default function createPlugin({ config, logging }: AstroPluginOptions): v
 			viteServer.watcher.on('unlink', rebuildManifest.bind(null, true));
 			viteServer.watcher.on('change', rebuildManifest.bind(null, false));
 			return () => {
-				removeViteHttpMiddleware(viteServer.middlewares);
-
 				// Push this middleware to the front of the stack so that it can intercept responses.
 				if (config.base !== '/') {
 					viteServer.middlewares.stack.unshift({

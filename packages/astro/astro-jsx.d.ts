@@ -23,12 +23,12 @@ declare namespace astroHTML.JSX {
 		children?: Children;
 	}
 
-	type AstroBuiltinProps = import('./dist/types/@types/astro').AstroBuiltinProps;
-	type AstroBuiltinAttributes = import('./dist/types/@types/astro').AstroBuiltinAttributes;
-	type AstroDefineVarsAttribute = import('./dist/types/@types/astro').AstroDefineVarsAttribute;
-	type AstroScriptAttributes = import('./dist/types/@types/astro').AstroScriptAttributes &
+	type AstroBuiltinProps = import('./dist/@types/astro').AstroBuiltinProps;
+	type AstroBuiltinAttributes = import('./dist/@types/astro').AstroBuiltinAttributes;
+	type AstroDefineVarsAttribute = import('./dist/@types/astro').AstroDefineVarsAttribute;
+	type AstroScriptAttributes = import('./dist/@types/astro').AstroScriptAttributes &
 		AstroDefineVarsAttribute;
-	type AstroStyleAttributes = import('./dist/types/@types/astro').AstroStyleAttributes &
+	type AstroStyleAttributes = import('./dist/@types/astro').AstroStyleAttributes &
 		AstroDefineVarsAttribute;
 
 	// This is an unfortunate use of `any`, but unfortunately we can't make a type that works for every framework
@@ -548,7 +548,7 @@ declare namespace astroHTML.JSX {
 		| 'strict-origin-when-cross-origin'
 		| 'unsafe-url';
 
-	type HTMLAttributeAnchorTarget = '_self' | '_blank' | '_parent' | '_top';
+	type HTMLAttributeAnchorTarget = '_self' | '_blank' | '_parent' | '_top' | (string & {});
 
 	interface AnchorHTMLAttributes extends HTMLAttributes {
 		download?: string | boolean | undefined | null;
@@ -756,7 +756,7 @@ declare namespace astroHTML.JSX {
 		size?: number | string | undefined | null;
 		src?: string | undefined | null;
 		step?: number | string | undefined | null;
-		type?: HTMLInputTypeAttribute | string | undefined | null;
+		type?: HTMLInputTypeAttribute | undefined | null;
 		value?: string | string[] | number | undefined | null;
 		width?: number | string | undefined | null;
 	}
@@ -1007,7 +1007,7 @@ declare namespace astroHTML.JSX {
 	//   - "string"
 	//   - union of string literals
 	interface SVGAttributes extends AriaAttributes, DOMAttributes, AstroBuiltinAttributes {
-		// Attributes which also defined in HTMLAttributes
+		// Attributes which are also defined in HTMLAttributes
 		class?: string | undefined | null;
 		color?: string | undefined | null;
 		height?: number | string | undefined | null;
@@ -1018,6 +1018,7 @@ declare namespace astroHTML.JSX {
 		method?: string | undefined | null;
 		min?: number | string | undefined | null;
 		name?: string | undefined | null;
+		slot?: string | undefined | null;
 		style?: string | Record<string, any> | undefined | null;
 		target?: string | undefined | null;
 		type?: string | undefined | null;

@@ -89,6 +89,26 @@ describe('Astro Markdown', () => {
 		expect(headingSlugs).to.contain('section-2');
 	});
 
+	it('Passes compiled content to layout via "compiledContent" prop', async () => {
+		const html = await fixture.readFile('/with-layout/index.html');
+		const $ = cheerio.load(html);
+
+		const compiledContent = $('[data-compiled-content]');
+
+		expect(fixLineEndings(compiledContent.text()).trim()).to.equal(
+			`<h2 id="section-1">Section 1</h2>\n<h2 id="section-2">Section 2</h2>`
+		);
+	});
+
+	it('Passes raw content to layout via "rawContent" prop', async () => {
+		const html = await fixture.readFile('/with-layout/index.html');
+		const $ = cheerio.load(html);
+
+		const rawContent = $('[data-raw-content]');
+
+		expect(fixLineEndings(rawContent.text()).trim()).to.equal(`## Section 1\n\n## Section 2`);
+	});
+
 	it('Exposes getHeadings() on glob imports', async () => {
 		const { headings } = JSON.parse(await fixture.readFile('/headings-glob.json'));
 
@@ -96,6 +116,24 @@ describe('Astro Markdown', () => {
 
 		expect(headingSlugs).to.contain('section-1');
 		expect(headingSlugs).to.contain('section-2');
+	});
+
+	it('passes "file" and "url" to layout', async () => {
+		const html = await fixture.readFile('/with-layout/index.html');
+		const $ = cheerio.load(html);
+
+		const frontmatterFile = $('[data-frontmatter-file]')?.text();
+		const frontmatterUrl = $('[data-frontmatter-url]')?.text();
+		const file = $('[data-file]')?.text();
+		const url = $('[data-url]')?.text();
+
+		expect(frontmatterFile?.endsWith('with-layout.md')).to.equal(
+			true,
+			'"file" prop does not end with correct path or is undefined'
+		);
+		expect(frontmatterUrl).to.equal('/with-layout');
+		expect(file).to.equal(frontmatterFile);
+		expect(url).to.equal(frontmatterUrl);
 	});
 
 	describe('Vite env vars (#3412)', () => {

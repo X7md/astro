@@ -4,9 +4,9 @@ import path from 'path';
 import resolve from 'resolve';
 import slash from 'slash';
 import { fileURLToPath, pathToFileURL } from 'url';
-import type { ErrorPayload } from 'vite';
-import type { AstroConfig } from '../@types/astro';
-import { removeTrailingForwardSlash } from './path.js';
+import type { ErrorPayload, ViteDevServer } from 'vite';
+import type { AstroConfig, RouteType } from '../@types/astro';
+import { prependForwardSlash, removeTrailingForwardSlash } from './path.js';
 
 // process.env.PACKAGE_VERSION is injected when we build and publish the astro package.
 export const ASTRO_VERSION = process.env.PACKAGE_VERSION ?? 'development';
@@ -26,21 +26,24 @@ export function padMultilineString(source: string, n = 2) {
 	return lines.map((l) => ` `.repeat(n) + l).join(`\n`);
 }
 
-const STATUS_CODE_REGEXP = /^\/?[0-9]{3}$/;
+const REGEXP_404_OR_500_ROUTE = /(404)|(500)\/?$/;
 
 /**
  * Get the correct output filename for a route, based on your config.
  * Handles both "/foo" and "foo" `name` formats.
  * Handles `/404` and `/` correctly.
  */
-export function getOutputFilename(astroConfig: AstroConfig, name: string) {
+export function getOutputFilename(astroConfig: AstroConfig, name: string, type: RouteType) {
+	if (type === 'endpoint') {
+		return name;
+	}
 	if (name === '/' || name === '') {
 		return path.posix.join(name, 'index.html');
 	}
-	if (astroConfig.build.format === 'directory' && !STATUS_CODE_REGEXP.test(name)) {
-		return path.posix.join(name, 'index.html');
+	if (astroConfig.build.format === 'file' || REGEXP_404_OR_500_ROUTE.test(name)) {
+		return `${removeTrailingForwardSlash(name || 'index')}.html`;
 	}
-	return `${removeTrailingForwardSlash(name || 'index')}.html`;
+	return path.posix.join(name, 'index.html');
 }
 
 /** is a specifier an npm package? */
@@ -206,4 +209,20 @@ export function getLocalAddress(serverAddress: string, host: string | boolean): 
 	} else {
 		return serverAddress;
 	}
+}
+
+/**
+ * Simulate Vite's resolve and import analysis so we can import the id as an URL
+ * through a script tag or a dynamic import as-is.
+ */
+// NOTE: `/@id/` should only be used when the id is fully resolved
+export async function resolveIdToUrl(viteServer: ViteDevServer, id: string) {
+	const result = await viteServer.pluginContainer.resolveId(id);
+	if (!result) {
+		return VALID_ID_PREFIX + id;
+	}
+	if (path.isAbsolute(result.id)) {
+		return '/@fs' + prependForwardSlash(result.id);
+	}
+	return VALID_ID_PREFIX + result.id;
 }

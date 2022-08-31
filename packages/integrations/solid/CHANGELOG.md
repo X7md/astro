@@ -1,5 +1,19 @@
 # @astrojs/solid-js
 
+## 1.1.0
+
+### Minor Changes
+
+- [#4496](https://github.com/withastro/astro/pull/4496) [`824a2addd`](https://github.com/withastro/astro/commit/824a2adddd09f57ad3f4bd950a1fbf65b6f9d833) Thanks [@mzaien](https://github.com/mzaien)! - Update solid to 1.5
+
+## 1.0.0
+
+### Major Changes
+
+- [`04ad44563`](https://github.com/withastro/astro/commit/04ad445632c67bdd60c1704e1e0dcbcaa27b9308) - > Astro v1.0 is out! Read the [official announcement post](https://astro.build/blog/astro-1/).
+
+  **No breaking changes**. This package is now officially stable and compatible with `astro@1.0.0`!
+
 ## 0.4.1
 
 ### Patch Changes
