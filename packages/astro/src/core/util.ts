@@ -1,19 +1,29 @@
-import eol from 'eol';
-import fs from 'fs';
-import path from 'path';
-import resolve from 'resolve';
-import slash from 'slash';
-import { fileURLToPath, pathToFileURL } from 'url';
-import type { ErrorPayload, ViteDevServer } from 'vite';
-import type { AstroConfig, RouteType } from '../@types/astro';
-import { prependForwardSlash, removeTrailingForwardSlash } from './path.js';
-
-// process.env.PACKAGE_VERSION is injected when we build and publish the astro package.
-export const ASTRO_VERSION = process.env.PACKAGE_VERSION ?? 'development';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { normalizePath } from 'vite';
+import type { AstroConfig, AstroSettings, RouteType } from '../@types/astro.js';
+import { isServerLikeOutput } from '../prerender/utils.js';
+import { SUPPORTED_MARKDOWN_FILE_EXTENSIONS } from './constants.js';
+import type { ModuleLoader } from './module-loader/index.js';
+import { prependForwardSlash, removeTrailingForwardSlash, slash } from './path.js';
 
 /** Returns true if argument is an object of any prototype/class (but not null). */
 export function isObject(value: unknown): value is Record<string, any> {
 	return typeof value === 'object' && value != null;
+}
+
+/** Cross-realm compatible URL */
+export function isURL(value: unknown): value is URL {
+	return Object.prototype.toString.call(value) === '[object URL]';
+}
+/** Check if a file is a markdown file based on its extension */
+export function isMarkdownFile(fileId: string, option?: { suffix?: string }): boolean {
+	const _suffix = option?.suffix ?? '';
+	for (let markdownFileExtension of SUPPORTED_MARKDOWN_FILE_EXTENSIONS) {
+		if (fileId.endsWith(`${markdownFileExtension}${_suffix}`)) return true;
+	}
+	return false;
 }
 
 /** Wraps an object in an array. If an array is passed, ignore it. */
@@ -26,7 +36,7 @@ export function padMultilineString(source: string, n = 2) {
 	return lines.map((l) => ` `.repeat(n) + l).join(`\n`);
 }
 
-const REGEXP_404_OR_500_ROUTE = /(404)|(500)\/?$/;
+const STATUS_CODE_PAGES = new Set(['/404', '/500']);
 
 /**
  * Get the correct output filename for a route, based on your config.
@@ -40,7 +50,7 @@ export function getOutputFilename(astroConfig: AstroConfig, name: string, type: 
 	if (name === '/' || name === '') {
 		return path.posix.join(name, 'index.html');
 	}
-	if (astroConfig.build.format === 'file' || REGEXP_404_OR_500_ROUTE.test(name)) {
+	if (astroConfig.build.format === 'file' || STATUS_CODE_PAGES.has(name)) {
 		return `${removeTrailingForwardSlash(name || 'index')}.html`;
 	}
 	return path.posix.join(name, 'index.html');
@@ -72,53 +82,6 @@ export function parseNpmName(
 	};
 }
 
-/** Coalesce any throw variable to an Error instance. */
-export function createSafeError(err: any): Error {
-	return err instanceof Error || (err && err.name && err.message)
-		? err
-		: new Error(JSON.stringify(err));
-}
-
-/** generate code frame from esbuild error */
-export function codeFrame(src: string, loc: ErrorPayload['err']['loc']): string {
-	if (!loc) return '';
-	const lines = eol
-		.lf(src)
-		.split('\n')
-		.map((ln) => ln.replace(/\t/g, '  '));
-	// grab 2 lines before, and 3 lines after focused line
-	const visibleLines = [];
-	for (let n = -2; n <= 2; n++) {
-		if (lines[loc.line + n]) visibleLines.push(loc.line + n);
-	}
-	// figure out gutter width
-	let gutterWidth = 0;
-	for (const lineNo of visibleLines) {
-		let w = `> ${lineNo}`;
-		if (w.length > gutterWidth) gutterWidth = w.length;
-	}
-	// print lines
-	let output = '';
-	for (const lineNo of visibleLines) {
-		const isFocusedLine = lineNo === loc.line - 1;
-		output += isFocusedLine ? '> ' : '  ';
-		output += `${lineNo + 1} | ${lines[lineNo]}\n`;
-		if (isFocusedLine)
-			output += `${Array.from({ length: gutterWidth }).join(' ')}  | ${Array.from({
-				length: loc.column,
-			}).join(' ')}^\n`;
-	}
-	return output;
-}
-
-export function resolveDependency(dep: string, projectRoot: URL) {
-	const resolved = resolve.sync(dep, {
-		basedir: fileURLToPath(projectRoot),
-	});
-	// For Windows compat, we need a fully resolved `file://` URL string
-	return pathToFileURL(resolved).toString();
-}
-
 /**
  * Convert file URL to ID for viteServer.moduleGraph.idToModuleMap.get(:viteID)
  * Format:
@@ -126,32 +89,18 @@ export function resolveDependency(dep: string, projectRoot: URL) {
  *   Windows:    C:/Users/astro/code/my-project/src/pages/index.astro
  */
 export function viteID(filePath: URL): string {
-	return slash(fileURLToPath(filePath));
+	return slash(fileURLToPath(filePath) + filePath.search);
 }
 
 export const VALID_ID_PREFIX = `/@id/`;
+export const NULL_BYTE_PLACEHOLDER = `__x00__`;
 
-// Strip valid id prefix. This is prepended to resolved Ids that are
-// not valid browser import specifiers by the importAnalysis plugin.
+// Strip valid id prefix and replace null byte placeholder. Both are prepended to resolved ids
+// as they are not valid browser import specifiers (by the Vite's importAnalysis plugin)
 export function unwrapId(id: string): string {
-	return id.startsWith(VALID_ID_PREFIX) ? id.slice(VALID_ID_PREFIX.length) : id;
-}
-
-/** An fs utility, similar to `rimraf` or `rm -rf` */
-export function removeDir(_dir: URL): void {
-	const dir = fileURLToPath(_dir);
-	fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3 });
-}
-
-export function emptyDir(_dir: URL, skip?: Set<string>): void {
-	const dir = fileURLToPath(_dir);
-	if (!fs.existsSync(dir)) return undefined;
-	for (const file of fs.readdirSync(dir)) {
-		if (skip?.has(file)) {
-			continue;
-		}
-		fs.rmSync(path.resolve(dir, file), { recursive: true, force: true, maxRetries: 3 });
-	}
+	return id.startsWith(VALID_ID_PREFIX)
+		? id.slice(VALID_ID_PREFIX.length).replace(NULL_BYTE_PLACEHOLDER, '\0')
+		: id;
 }
 
 export function resolvePages(config: AstroConfig) {
@@ -163,6 +112,14 @@ function isInPagesDir(file: URL, config: AstroConfig): boolean {
 	return file.toString().startsWith(pagesDir.toString());
 }
 
+function isInjectedRoute(file: URL, settings: AstroSettings) {
+	let fileURL = file.toString();
+	for (const route of settings.resolvedInjectedRoutes) {
+		if (route.resolvedEntryPoint && fileURL === route.resolvedEntryPoint.toString()) return true;
+	}
+	return false;
+}
+
 function isPublicRoute(file: URL, config: AstroConfig): boolean {
 	const pagesDir = resolvePages(config);
 	const parts = file.toString().replace(pagesDir.toString(), '').split('/').slice(1);
@@ -172,21 +129,27 @@ function isPublicRoute(file: URL, config: AstroConfig): boolean {
 	return true;
 }
 
-function endsWithPageExt(file: URL, config: AstroConfig): boolean {
-	for (const ext of config._ctx.pageExtensions) {
+function endsWithPageExt(file: URL, settings: AstroSettings): boolean {
+	for (const ext of settings.pageExtensions) {
 		if (file.toString().endsWith(ext)) return true;
 	}
 	return false;
 }
 
-export function isPage(file: URL, config: AstroConfig): boolean {
-	if (!isInPagesDir(file, config)) return false;
-	if (!isPublicRoute(file, config)) return false;
-	return endsWithPageExt(file, config);
+export function isPage(file: URL, settings: AstroSettings): boolean {
+	if (!isInPagesDir(file, settings.config) && !isInjectedRoute(file, settings)) return false;
+	if (!isPublicRoute(file, settings.config)) return false;
+	return endsWithPageExt(file, settings);
 }
 
-export function isModeServerWithNoAdapter(config: AstroConfig): boolean {
-	return config.output === 'server' && !config._ctx.adapter;
+export function isEndpoint(file: URL, settings: AstroSettings): boolean {
+	if (!isInPagesDir(file, settings.config)) return false;
+	if (!isPublicRoute(file, settings.config)) return false;
+	return !endsWithPageExt(file, settings);
+}
+
+export function isModeServerWithNoAdapter(settings: AstroSettings): boolean {
+	return isServerLikeOutput(settings.config) && !settings.adapter;
 }
 
 export function relativeToSrcDir(config: AstroConfig, idOrUrl: URL | string) {
@@ -199,16 +162,26 @@ export function relativeToSrcDir(config: AstroConfig, idOrUrl: URL | string) {
 	return id.slice(slash(fileURLToPath(config.srcDir)).length);
 }
 
-export function emoji(char: string, fallback: string) {
-	return process.platform !== 'win32' ? char : fallback;
+export function rootRelativePath(
+	root: URL,
+	idOrUrl: URL | string,
+	shouldPrependForwardSlash = true
+) {
+	let id: string;
+	if (typeof idOrUrl !== 'string') {
+		id = unwrapId(viteID(idOrUrl));
+	} else {
+		id = idOrUrl;
+	}
+	const normalizedRoot = normalizePath(fileURLToPath(root));
+	if (id.startsWith(normalizedRoot)) {
+		id = id.slice(normalizedRoot.length);
+	}
+	return shouldPrependForwardSlash ? prependForwardSlash(id) : id;
 }
 
-export function getLocalAddress(serverAddress: string, host: string | boolean): string {
-	if (typeof host === 'boolean' || host === 'localhost') {
-		return 'localhost';
-	} else {
-		return serverAddress;
-	}
+export function emoji(char: string, fallback: string) {
+	return process.platform !== 'win32' ? char : fallback;
 }
 
 /**
@@ -216,13 +189,45 @@ export function getLocalAddress(serverAddress: string, host: string | boolean): 
  * through a script tag or a dynamic import as-is.
  */
 // NOTE: `/@id/` should only be used when the id is fully resolved
-export async function resolveIdToUrl(viteServer: ViteDevServer, id: string) {
-	const result = await viteServer.pluginContainer.resolveId(id);
-	if (!result) {
+export async function resolveIdToUrl(loader: ModuleLoader, id: string, root?: URL) {
+	let resultId = await loader.resolveId(id, undefined);
+	// Try resolve jsx to tsx
+	if (!resultId && id.endsWith('.jsx')) {
+		resultId = await loader.resolveId(id.slice(0, -4), undefined);
+	}
+	if (!resultId) {
 		return VALID_ID_PREFIX + id;
 	}
-	if (path.isAbsolute(result.id)) {
-		return '/@fs' + prependForwardSlash(result.id);
+	if (path.isAbsolute(resultId)) {
+		const normalizedRoot = root && normalizePath(fileURLToPath(root));
+		// Convert to root-relative path if path is inside root
+		if (normalizedRoot && resultId.startsWith(normalizedRoot)) {
+			return resultId.slice(normalizedRoot.length - 1);
+		} else {
+			return '/@fs' + prependForwardSlash(resultId);
+		}
 	}
-	return VALID_ID_PREFIX + result.id;
+	return VALID_ID_PREFIX + resultId;
+}
+
+export function resolveJsToTs(filePath: string) {
+	if (filePath.endsWith('.jsx') && !fs.existsSync(filePath)) {
+		const tryPath = filePath.slice(0, -4) + '.tsx';
+		if (fs.existsSync(tryPath)) {
+			return tryPath;
+		}
+	}
+	return filePath;
+}
+
+/**
+ * Resolve the hydration paths so that it can be imported in the client
+ */
+export function resolvePath(specifier: string, importer: string) {
+	if (specifier.startsWith('.')) {
+		const absoluteSpecifier = path.resolve(path.dirname(importer), specifier);
+		return resolveJsToTs(normalizePath(absoluteSpecifier));
+	} else {
+		return specifier;
+	}
 }

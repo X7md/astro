@@ -1,17 +1,18 @@
+/// <reference types="../@types/network-information.d.ts" />
 import throttles from 'throttles';
-import '../@types/network-information.d.ts';
 import requestIdleCallback from './requestIdleCallback.js';
 
 const events = ['mouseenter', 'touchstart', 'focus'];
 
 const preloaded = new Set<string>();
+const loadedStyles = new Set<string>();
 
 function shouldPreload({ href }: { href: string }) {
 	try {
 		const url = new URL(href);
 		return (
 			window.location.origin === url.origin &&
-			window.location.pathname !== url.hash &&
+			window.location.pathname !== url.pathname &&
 			!preloaded.has(href)
 		);
 	} catch {}
@@ -43,17 +44,23 @@ function onLinkEvent({ target }: Event) {
 
 async function preloadHref(link: HTMLAnchorElement) {
 	unobserve(link);
-
 	const { href } = link;
 
 	try {
 		const contents = await fetch(href).then((res) => res.text());
-		parser = parser || new DOMParser();
+		parser ||= new DOMParser();
 
 		const html = parser.parseFromString(contents, 'text/html');
 		const styles = Array.from(html.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]'));
 
-		await Promise.all(styles.map((el) => fetch(el.href)));
+		await Promise.all(
+			styles
+				.filter((el) => !loadedStyles.has(el.href))
+				.map((el) => {
+					loadedStyles.add(el.href);
+					return fetch(el.href);
+				})
+		);
 	} catch {}
 }
 
@@ -70,20 +77,34 @@ export interface PrefetchOptions {
 	 * @default 1
 	 */
 	throttle?: number;
+	/**
+	 * Element selector used to find all links on the page that should be prefetched on user interaction.
+	 *
+	 * @default 'a[href][rel~="prefetch-intent"]'
+	 */
+	intentSelector?: string | string[];
 }
 
 export default function prefetch({
 	selector = 'a[href][rel~="prefetch"]',
 	throttle = 1,
+	intentSelector = 'a[href][rel~="prefetch-intent"]',
 }: PrefetchOptions) {
-	const conn = navigator.connection;
+	// If the navigator is offline, it is very unlikely that a request can be made successfully
+	if (!navigator.onLine) {
+		return Promise.reject(new Error('Cannot prefetch, no network connection'));
+	}
 
-	if (typeof conn !== 'undefined') {
-		// Don't prefetch if using 2G or if Save-Data is enabled.
-		if (conn.saveData) {
+	// `Navigator.connection` is an experimental API and is not supported in every browser.
+	if ('connection' in navigator) {
+		const connection = (navigator as any).connection;
+		// Don't prefetch if Save-Data is enabled.
+		if (connection.saveData) {
 			return Promise.reject(new Error('Cannot prefetch, Save-Data is enabled'));
 		}
-		if (/2g/.test(conn.effectiveType)) {
+
+		// Do not prefetch if using 2G or 3G
+		if (/(2|3)g/.test(connection.effectiveType)) {
 			return Promise.reject(new Error('Cannot prefetch, network conditions are poor'));
 		}
 	}
@@ -95,18 +116,40 @@ export default function prefetch({
 		new IntersectionObserver((entries) => {
 			entries.forEach((entry) => {
 				if (entry.isIntersecting && entry.target instanceof HTMLAnchorElement) {
-					toAdd(() => preloadHref(entry.target as HTMLAnchorElement).finally(isDone));
+					const relAttributeValue = entry.target.getAttribute('rel') || '';
+					let matchesIntentSelector = false;
+					// Check if intentSelector is an array
+					if (Array.isArray(intentSelector)) {
+						// If intentSelector is an array, use .some() to check for matches
+						matchesIntentSelector = intentSelector.some((intent) =>
+							relAttributeValue.includes(intent)
+						);
+					} else {
+						// If intentSelector is a string, use .includes() to check for a match
+						matchesIntentSelector = relAttributeValue.includes(intentSelector);
+					}
+					if (!matchesIntentSelector) {
+						toAdd(() => preloadHref(entry.target as HTMLAnchorElement).finally(isDone));
+					}
 				}
 			});
 		});
 
 	requestIdleCallback(() => {
-		const links = Array.from(document.querySelectorAll<HTMLAnchorElement>(selector)).filter(
-			shouldPreload
-		);
+		const links = [...document.querySelectorAll<HTMLAnchorElement>(selector)].filter(shouldPreload);
+		links.forEach(observe);
 
-		for (const link of links) {
-			observe(link);
-		}
+		const intentSelectorFinal = Array.isArray(intentSelector)
+			? intentSelector.join(',')
+			: intentSelector;
+		// Observe links with prefetch-intent
+		const intentLinks = [
+			...document.querySelectorAll<HTMLAnchorElement>(intentSelectorFinal),
+		].filter(shouldPreload);
+		intentLinks.forEach((link) => {
+			events.map((event) =>
+				link.addEventListener(event, onLinkEvent, { passive: true, once: true })
+			);
+		});
 	});
 }

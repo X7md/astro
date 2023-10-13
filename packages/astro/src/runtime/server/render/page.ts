@@ -1,55 +1,37 @@
-import type { SSRResult } from '../../../@types/astro';
-import type { AstroComponentFactory } from './index';
+import type { RouteData, SSRResult } from '../../../@types/astro.js';
+import { renderComponentToString, type NonAstroPageComponent } from './component.js';
+import type { AstroComponentFactory } from './index.js';
 
-import { createResponse } from '../response.js';
-import { isAstroComponent, isAstroComponentFactory, renderAstroComponent } from './astro.js';
-import { stringifyChunk } from './common.js';
-import { renderComponent } from './component.js';
-import { maybeRenderHead } from './head.js';
-
-const encoder = new TextEncoder();
-const needsHeadRenderingSymbol = Symbol.for('astro.needsHeadRendering');
-
-type NonAstroPageComponent = {
-	name: string;
-	[needsHeadRenderingSymbol]: boolean;
-};
-
-function nonAstroPageNeedsHeadInjection(pageComponent: NonAstroPageComponent): boolean {
-	return needsHeadRenderingSymbol in pageComponent && !!pageComponent[needsHeadRenderingSymbol];
-}
+import { isAstroComponentFactory } from './astro/index.js';
+import { renderToReadableStream, renderToString } from './astro/render.js';
+import { encoder } from './common.js';
 
 export async function renderPage(
 	result: SSRResult,
 	componentFactory: AstroComponentFactory | NonAstroPageComponent,
 	props: any,
 	children: any,
-	streaming: boolean
+	streaming: boolean,
+	route?: RouteData
 ): Promise<Response> {
 	if (!isAstroComponentFactory(componentFactory)) {
+		result._metadata.headInTree =
+			result.componentMetadata.get((componentFactory as any).moduleId)?.containsHead ?? false;
+
 		const pageProps: Record<string, any> = { ...(props ?? {}), 'server:root': true };
-		const output = await renderComponent(
+
+		const str = await renderComponentToString(
 			result,
 			componentFactory.name,
 			componentFactory,
 			pageProps,
-			null
+			null,
+			true,
+			route
 		);
-		let html = output.toString();
-		if (!/<!doctype html/i.test(html)) {
-			let rest = html;
-			html = `<!DOCTYPE html>`;
-			// This symbol currently exists for md components, but is something that could
-			// be added for any page-level component that's not an Astro component.
-			// to signal that head rendering is needed.
-			if (nonAstroPageNeedsHeadInjection(componentFactory)) {
-				for await (let chunk of maybeRenderHead(result)) {
-					html += chunk;
-				}
-			}
-			html += rest;
-		}
-		const bytes = encoder.encode(html);
+
+		const bytes = encoder.encode(str);
+
 		return new Response(bytes, {
 			headers: new Headers([
 				['Content-Type', 'text/html; charset=utf-8'],
@@ -57,59 +39,35 @@ export async function renderPage(
 			]),
 		});
 	}
-	const factoryReturnValue = await componentFactory(result, props, children);
 
-	if (isAstroComponent(factoryReturnValue)) {
-		let iterable = renderAstroComponent(factoryReturnValue);
-		let init = result.response;
-		let headers = new Headers(init.headers);
-		let body: BodyInit;
+	// Mark if this page component contains a <head> within its tree. If it does
+	// We avoid implicit head injection entirely.
+	result._metadata.headInTree =
+		result.componentMetadata.get(componentFactory.moduleId!)?.containsHead ?? false;
 
-		if (streaming) {
-			body = new ReadableStream({
-				start(controller) {
-					async function read() {
-						let i = 0;
-						try {
-							for await (const chunk of iterable) {
-								let html = stringifyChunk(result, chunk);
-
-								if (i === 0) {
-									if (!/<!doctype html/i.test(html)) {
-										controller.enqueue(encoder.encode('<!DOCTYPE html>\n'));
-									}
-								}
-								controller.enqueue(encoder.encode(html));
-								i++;
-							}
-							controller.close();
-						} catch (e) {
-							controller.error(e);
-						}
-					}
-					read();
-				},
-			});
-		} else {
-			body = '';
-			let i = 0;
-			for await (const chunk of iterable) {
-				let html = stringifyChunk(result, chunk);
-				if (i === 0) {
-					if (!/<!doctype html/i.test(html)) {
-						body += '<!DOCTYPE html>\n';
-					}
-				}
-				body += html;
-				i++;
-			}
-			const bytes = encoder.encode(body);
-			headers.set('Content-Length', bytes.byteLength.toString());
-		}
-
-		let response = createResponse(body, { ...init, headers });
-		return response;
+	let body: BodyInit | Response;
+	if (streaming) {
+		body = await renderToReadableStream(result, componentFactory, props, children, true, route);
 	} else {
-		return factoryReturnValue;
+		body = await renderToString(result, componentFactory, props, children, true, route);
 	}
+
+	// If the Astro component returns a Response on init, return that response
+	if (body instanceof Response) return body;
+
+	// Create final response from body
+	const init = result.response;
+	const headers = new Headers(init.headers);
+	// For non-streaming, convert string to byte array to calculate Content-Length
+	if (!streaming && typeof body === 'string') {
+		body = encoder.encode(body);
+		headers.set('Content-Length', body.byteLength.toString());
+	}
+	// TODO: Revisit if user should manually set charset by themselves in Astro 4
+	// This code preserves the existing behaviour for markdown pages since Astro 2
+	if (route?.component.endsWith('.md')) {
+		headers.set('Content-Type', 'text/html; charset=utf-8');
+	}
+	const response = new Response(body, { ...init, headers });
+	return response;
 }

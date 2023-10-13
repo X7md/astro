@@ -1,5 +1,169 @@
 # @astrojs/solid-js
 
+## 3.0.2
+
+### Patch Changes
+
+- [#8737](https://github.com/withastro/astro/pull/8737) [`6f60da805`](https://github.com/withastro/astro/commit/6f60da805e0014bc50dd07bef972e91c73560c3c) Thanks [@ematipico](https://github.com/ematipico)! - Add provenance statement when publishing the library from CI
+
+## 3.0.1
+
+### Patch Changes
+
+- [#8365](https://github.com/withastro/astro/pull/8365) [`a525d5db1`](https://github.com/withastro/astro/commit/a525d5db1746ea6b79fced2a967b82c778320dbf) Thanks [@ryansolid](https://github.com/ryansolid)! - Fix hydration in Solid renderer
+
+## 3.0.0
+
+### Major Changes
+
+- [#8188](https://github.com/withastro/astro/pull/8188) [`d0679a666`](https://github.com/withastro/astro/commit/d0679a666f37da0fca396d42b9b32bbb25d29312) Thanks [@ematipico](https://github.com/ematipico)! - Remove support for Node 16. The lowest supported version by Astro and all integrations is now v18.14.1. As a reminder, Node 16 will be deprecated on the 11th September 2023.
+
+- [#7924](https://github.com/withastro/astro/pull/7924) [`519a1c4e8`](https://github.com/withastro/astro/commit/519a1c4e8407c7abcb8d879b67a9f4b960652cae) Thanks [@matthewp](https://github.com/matthewp)! - New `include` and `exclude` config options
+
+  The Solid integration now has new `include` and `exclude` config options. Use these if you want to use Solid alongside another JSX framework; include specifies files to be compiled for Solid and `exclude` does the opposite.
+
+- [#8179](https://github.com/withastro/astro/pull/8179) [`6011d52d3`](https://github.com/withastro/astro/commit/6011d52d38e43c3e3d52bc3bc41a60e36061b7b7) Thanks [@matthewp](https://github.com/matthewp)! - Astro 3.0 Release Candidate
+
+### Patch Changes
+
+- [#8264](https://github.com/withastro/astro/pull/8264) [`1f58a7a1b`](https://github.com/withastro/astro/commit/1f58a7a1bea6888868b689dac94801d554319b02) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Automatically unmount islands when `astro:unmount` is fired
+
+## 3.0.0-rc.4
+
+### Patch Changes
+
+- [#8264](https://github.com/withastro/astro/pull/8264) [`1f58a7a1b`](https://github.com/withastro/astro/commit/1f58a7a1bea6888868b689dac94801d554319b02) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Automatically unmount islands when `astro:unmount` is fired
+
+## 3.0.0-rc.3
+
+### Major Changes
+
+- [#8179](https://github.com/withastro/astro/pull/8179) [`6011d52d3`](https://github.com/withastro/astro/commit/6011d52d38e43c3e3d52bc3bc41a60e36061b7b7) Thanks [@matthewp](https://github.com/matthewp)! - Astro 3.0 Release Candidate
+
+## 3.0.0-beta.2
+
+### Patch Changes
+
+- [#8107](https://github.com/withastro/astro/pull/8107) [`5b4b78245`](https://github.com/withastro/astro/commit/5b4b782451ba9a7d685d56990b471740616e9610) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Update `babel-preset-solid` dependency to `^1.7.7`
+
+## 3.0.0-beta.1
+
+### Major Changes
+
+- [#7924](https://github.com/withastro/astro/pull/7924) [`519a1c4e8`](https://github.com/withastro/astro/commit/519a1c4e8407c7abcb8d879b67a9f4b960652cae) Thanks [@matthewp](https://github.com/matthewp)! - New `include` and `exclude` config options
+
+  The Solid integration now has new `include` and `exclude` config options. Use these if you want to use Solid alongside another JSX framework; include specifies files to be compiled for Solid and `exclude` does the opposite.
+
+## 3.0.0-beta.0
+
+### Major Changes
+
+- [`1eae2e3f7`](https://github.com/withastro/astro/commit/1eae2e3f7d693c9dfe91c8ccfbe606d32bf2fb81) Thanks [@Princesseuh](https://github.com/Princesseuh)! - Remove support for Node 16. The lowest supported version by Astro and all integrations is now v18.14.1. As a reminder, Node 16 will be deprecated on the 11th September 2023.
+
+## 2.2.1
+
+### Patch Changes
+
+- [#8107](https://github.com/withastro/astro/pull/8107) [`5b4b78245`](https://github.com/withastro/astro/commit/5b4b782451ba9a7d685d56990b471740616e9610) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Update `babel-preset-solid` dependency to `^1.7.7`
+
+## 2.2.0
+
+### Minor Changes
+
+- [#7093](https://github.com/withastro/astro/pull/7093) [`3d525efc9`](https://github.com/withastro/astro/commit/3d525efc95cfb2deb5d9e04856d02965d66901c9) Thanks [@matthewp](https://github.com/matthewp)! - Prevent removal of nested slots within islands
+
+  This change introduces a new flag that renderers can add called `supportsAstroStaticSlot`. What this does is let Astro know that the render is sending `<astro-static-slot>` as placeholder values for static (non-hydrated) slots which Astro will then remove.
+
+  This change is completely backwards compatible, but fixes bugs caused by combining ssr-only and client-side framework components like so:
+
+  ```astro
+  <Component>
+    <div>
+      <Component client:load>
+        <span>Nested</span>
+      </Component>
+    </div>
+  </Component>
+  ```
+
+### Patch Changes
+
+- [#7101](https://github.com/withastro/astro/pull/7101) [`2994bc52d`](https://github.com/withastro/astro/commit/2994bc52d360bf7ca3681c5f6976e64577cf5209) Thanks [@bluwy](https://github.com/bluwy)! - Always build edge/worker runtime with Vite `webworker` SSR target
+
+- [#7104](https://github.com/withastro/astro/pull/7104) [`826e02890`](https://github.com/withastro/astro/commit/826e0289005f645b902375b98d5549c6a95ccafa) Thanks [@bluwy](https://github.com/bluwy)! - Specify `"files"` field to only publish necessary files
+
+## 2.1.1
+
+### Patch Changes
+
+- [#6934](https://github.com/withastro/astro/pull/6934) [`b6797fc85`](https://github.com/withastro/astro/commit/b6797fc8583f7cb0749e69e72a56fe9fba6f815b) Thanks [@matthewp](https://github.com/matthewp)! - Allow Solid ecosystem packages to not need special export map configuration. By default Solid is now treated as an external package in SSR, so any other dependent packages will receive the same instance.
+
+## 2.1.0
+
+### Minor Changes
+
+- [#6213](https://github.com/withastro/astro/pull/6213) [`afbbc4d5b`](https://github.com/withastro/astro/commit/afbbc4d5bfafc1779bac00b41c2a1cb1c90f2808) Thanks [@Princesseuh](https://github.com/Princesseuh)! - Updated compilation settings to disable downlevelling for Node 14
+
+## 2.0.2
+
+### Patch Changes
+
+- [#6104](https://github.com/withastro/astro/pull/6104) [`8c80e78dd`](https://github.com/withastro/astro/commit/8c80e78dd5ebfe0528390f42222aadf4786a90fe) Thanks [@yasserhennawi](https://github.com/yasserhennawi)! - Bump vitefu for peerDep warning with Vite 4
+
+## 2.0.1
+
+### Patch Changes
+
+- [#5478](https://github.com/withastro/astro/pull/5478) [`1c7eef308`](https://github.com/withastro/astro/commit/1c7eef308e808aa5ed4662b53e67ec8d1b814d1f) Thanks [@nemo0](https://github.com/nemo0)! - Update READMEs for consistency
+
+## 2.0.0
+
+### Major Changes
+
+- [#5782](https://github.com/withastro/astro/pull/5782) [`1f92d64ea`](https://github.com/withastro/astro/commit/1f92d64ea35c03fec43aff64eaf704dc5a9eb30a) Thanks [@Princesseuh](https://github.com/Princesseuh)! - Remove support for Node 14. Minimum supported Node version is now >=16.12.0
+
+## 2.0.0-beta.0
+
+<details>
+<summary>See changes in 2.0.0-beta.0</summary>
+
+### Major Changes
+
+- [#5782](https://github.com/withastro/astro/pull/5782) [`1f92d64ea`](https://github.com/withastro/astro/commit/1f92d64ea35c03fec43aff64eaf704dc5a9eb30a) Thanks [@Princesseuh](https://github.com/Princesseuh)! - Remove support for Node 14. Minimum supported Node version is now >=16.12.0
+
+</details>
+
+## 1.2.3
+
+### Patch Changes
+
+- [#5345](https://github.com/withastro/astro/pull/5345) [`3ae2a961b`](https://github.com/withastro/astro/commit/3ae2a961b77da179d24c44734af54424e76a5049) Thanks [@bluwy](https://github.com/bluwy)! - Respect Vite user config for third-party packages config handling
+
+## 1.2.2
+
+### Patch Changes
+
+- [#5208](https://github.com/withastro/astro/pull/5208) [`c98c5aa0a`](https://github.com/withastro/astro/commit/c98c5aa0aecb4625aeedc2ffdad69f8b2cd2c153) Thanks [@bluwy](https://github.com/bluwy)! - Improve third-party solid packages config handling
+
+## 1.2.1
+
+### Patch Changes
+
+- [#5089](https://github.com/withastro/astro/pull/5089) [`0173c2b2d`](https://github.com/withastro/astro/commit/0173c2b2dfa49b3cb6afec7a411cdbad272b8fde) Thanks [@bluwy](https://github.com/bluwy)! - Suppress warnings for dependency crawling
+
+## 1.2.0
+
+### Minor Changes
+
+- [#5059](https://github.com/withastro/astro/pull/5059) [`f7fcdfe62`](https://github.com/withastro/astro/commit/f7fcdfe6210b3cf08cad92c49b64adf169b9e744) Thanks [@bluwy](https://github.com/bluwy)! - Auto ssr.noExternal solidjs dependencies
+
+## 1.1.1
+
+### Patch Changes
+
+- [#4888](https://github.com/withastro/astro/pull/4888) [`2dc582ac5`](https://github.com/withastro/astro/commit/2dc582ac5e2d6e1d434ccfe21616182e453feec3) Thanks [@AirBorne04](https://github.com/AirBorne04)! - adjusting the build settings for cloudflare (reverting back to platform browser over neutral)
+  adjusting the ssr settings for solidjs (to build for node)
+
 ## 1.1.0
 
 ### Minor Changes

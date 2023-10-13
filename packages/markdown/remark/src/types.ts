@@ -1,15 +1,24 @@
 import type * as hast from 'hast';
 import type * as mdast from 'mdast';
 import type {
-	all as Handlers,
 	one as Handler,
+	all as Handlers,
 	Options as RemarkRehypeOptions,
 } from 'remark-rehype';
-import type { ILanguageRegistration, IThemeRegistration, Theme } from 'shiki';
+import type {
+	BuiltinTheme,
+	LanguageRegistration,
+	ThemeRegistration,
+	ThemeRegistrationRaw,
+} from 'shikiji';
 import type * as unified from 'unified';
 import type { VFile } from 'vfile';
 
 export type { Node } from 'unist';
+
+export type MarkdownAstroData = {
+	frontmatter: Record<string, any>;
+};
 
 export type RemarkPlugin<PluginParameters extends any[] = any[]> = unified.Plugin<
 	PluginParameters,
@@ -26,35 +35,60 @@ export type RehypePlugin<PluginParameters extends any[] = any[]> = unified.Plugi
 export type RehypePlugins = (string | [string, any] | RehypePlugin | [RehypePlugin, any])[];
 
 export type RemarkRehype = Omit<RemarkRehypeOptions, 'handlers' | 'unknownHandler'> & {
-	handlers: typeof Handlers;
-} & { handler: typeof Handler };
+	handlers?: typeof Handlers;
+	handler?: typeof Handler;
+};
 
 export interface ShikiConfig {
-	langs?: ILanguageRegistration[];
-	theme?: Theme | IThemeRegistration;
+	langs?: LanguageRegistration[];
+	theme?: BuiltinTheme | ThemeRegistration | ThemeRegistrationRaw;
 	wrap?: boolean | null;
 }
 
 export interface AstroMarkdownOptions {
-	mode?: 'md' | 'mdx';
 	drafts?: boolean;
 	syntaxHighlight?: 'shiki' | 'prism' | false;
 	shikiConfig?: ShikiConfig;
 	remarkPlugins?: RemarkPlugins;
 	rehypePlugins?: RehypePlugins;
 	remarkRehype?: RemarkRehype;
-	extendDefaultPlugins?: boolean;
+	gfm?: boolean;
+	smartypants?: boolean;
 }
 
-export interface MarkdownRenderingOptions extends AstroMarkdownOptions {
+export interface ImageMetadata {
+	src: string;
+	width: number;
+	height: number;
+	type: string;
+}
+
+export interface MarkdownProcessor {
+	render: (
+		content: string,
+		opts?: MarkdownProcessorRenderOptions
+	) => Promise<MarkdownProcessorRenderResult>;
+}
+
+export interface MarkdownProcessorRenderOptions {
 	/** @internal */
 	fileURL?: URL;
-	/** @internal */
-	$?: {
-		scopedClassName: string | null;
-	};
-	isAstroFlavoredMd?: boolean;
+	/** Used for frontmatter injection plugins */
+	frontmatter?: Record<string, any>;
 }
+
+export interface MarkdownProcessorRenderResult {
+	code: string;
+	metadata: {
+		headings: MarkdownHeading[];
+		imagePaths: Set<string>;
+		frontmatter: Record<string, any>;
+	};
+}
+
+export interface MarkdownRenderingOptions
+	extends AstroMarkdownOptions,
+		MarkdownProcessorRenderOptions {}
 
 export interface MarkdownHeading {
 	depth: number;
@@ -68,8 +102,15 @@ export interface MarkdownMetadata {
 	html: string;
 }
 
+export interface MarkdownVFile extends VFile {
+	data: {
+		__astroHeadings?: MarkdownHeading[];
+		imagePaths?: Set<string>;
+	};
+}
+
 export interface MarkdownRenderingResult {
 	metadata: MarkdownMetadata;
-	vfile: VFile;
+	vfile: MarkdownVFile;
 	code: string;
 }

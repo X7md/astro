@@ -1,8 +1,9 @@
 import type { PluginObj } from '@babel/core';
 import * as t from '@babel/types';
-import { pathToFileURL } from 'node:url';
-import { HydrationDirectiveProps } from '../runtime/server/hydration.js';
-import type { PluginMetadata } from '../vite-plugin-astro/types';
+import { AstroError } from '../core/errors/errors.js';
+import { AstroErrorData } from '../core/errors/index.js';
+import { resolvePath } from '../core/util.js';
+import type { PluginMetadata } from '../vite-plugin-astro/types.js';
 
 const ClientOnlyPlaceholder = 'astro-client-only';
 
@@ -143,6 +144,9 @@ export default function astroJSX(): PluginObj {
 							clientOnlyComponents: [],
 							hydratedComponents: [],
 							scripts: [],
+							containsHead: false,
+							propagation: 'none',
+							pageOptions: {},
 						};
 					}
 					path.node.body.splice(
@@ -188,7 +192,7 @@ export default function astroJSX(): PluginObj {
 				) {
 					return;
 				}
-				const parent = path.findParent((n) => t.isJSXElement(n))!;
+				const parent = path.findParent((n) => t.isJSXElement(n.node))!;
 				const parentNode = parent.node as t.JSXElement;
 				const tagName = getTagName(parentNode);
 				if (!isComponent(tagName)) return;
@@ -206,7 +210,8 @@ export default function astroJSX(): PluginObj {
 							break;
 						}
 						if (namespace.at(0) === local) {
-							path.setData('import', { name: imported, path: source });
+							const name = imported === '*' ? imported : tagName;
+							path.setData('import', { name, path: source });
 							break;
 						}
 					}
@@ -214,16 +219,7 @@ export default function astroJSX(): PluginObj {
 
 				const meta = path.getData('import');
 				if (meta) {
-					let resolvedPath: string;
-					if (meta.path.startsWith('.')) {
-						const fileURL = pathToFileURL(state.filename!);
-						resolvedPath = `/@fs${new URL(meta.path, fileURL).pathname}`;
-						if (resolvedPath.endsWith('.jsx')) {
-							resolvedPath = resolvedPath.slice(0, -4);
-						}
-					} else {
-						resolvedPath = meta.path;
-					}
+					const resolvedPath = resolvePath(meta.path, state.filename!);
 
 					if (isClientOnly) {
 						(state.file.metadata as PluginMetadata).astro.clientOnlyComponents.push({
@@ -253,9 +249,9 @@ export default function astroJSX(): PluginObj {
 				}
 			},
 			JSXIdentifier(path, state) {
-				const isAttr = path.findParent((n) => t.isJSXAttribute(n));
+				const isAttr = path.findParent((n) => t.isJSXAttribute(n.node));
 				if (isAttr) return;
-				const parent = path.findParent((n) => t.isJSXElement(n))!;
+				const parent = path.findParent((n) => t.isJSXElement(n.node))!;
 				const parentNode = parent.node as t.JSXElement;
 				const tagName = getTagName(parentNode);
 				if (!isComponent(tagName)) return;
@@ -288,7 +284,7 @@ export default function astroJSX(): PluginObj {
 						for (const attr of parentNode.openingElement.attributes) {
 							if (t.isJSXAttribute(attr)) {
 								const name = jsxAttributeToString(attr);
-								if (HydrationDirectiveProps.has(name)) {
+								if (name.startsWith('client:')) {
 									// eslint-disable-next-line
 									console.warn(
 										`You are attempting to render <${displayName} ${name} />, but ${displayName} is an Astro component. Astro components do not render in the client and should not have a hydration directive. Please use a framework component for client rendering.`
@@ -297,16 +293,7 @@ export default function astroJSX(): PluginObj {
 							}
 						}
 					}
-					let resolvedPath: string;
-					if (meta.path.startsWith('.')) {
-						const fileURL = pathToFileURL(state.filename!);
-						resolvedPath = `/@fs${new URL(meta.path, fileURL).pathname}`;
-						if (resolvedPath.endsWith('.jsx')) {
-							resolvedPath = resolvedPath.slice(0, -4);
-						}
-					} else {
-						resolvedPath = meta.path;
-					}
+					const resolvedPath = resolvePath(meta.path, state.filename!);
 					if (isClientOnly) {
 						(state.file.metadata as PluginMetadata).astro.clientOnlyComponents.push({
 							exportName: meta.name,
@@ -327,11 +314,10 @@ export default function astroJSX(): PluginObj {
 						addClientMetadata(parentNode, meta);
 					}
 				} else {
-					throw new Error(
-						`Unable to match <${getTagName(
-							parentNode
-						)}> with client:* directive to an import statement!`
-					);
+					throw new AstroError({
+						...AstroErrorData.NoMatchingImport,
+						message: AstroErrorData.NoMatchingImport.message(getTagName(parentNode)),
+					});
 				}
 			},
 		},

@@ -1,10 +1,11 @@
-import { ZodError } from 'zod';
-import { AstroErrorCodes, ErrorWithMetadata } from '../core/errors.js';
+import type { ZodError } from 'zod';
+import type { ErrorData } from '../core/errors/errors-data.js';
+import { AstroError, AstroErrorData, type ErrorWithMetadata } from '../core/errors/index.js';
 
 const EVENT_ERROR = 'ASTRO_CLI_ERROR';
 
 interface ErrorEventPayload {
-	code: number | undefined;
+	name: string;
 	isFatal: boolean;
 	plugin?: string | undefined;
 	cliCommand: string;
@@ -22,15 +23,13 @@ interface ConfigErrorEventPayload extends ErrorEventPayload {
  * content like a filename, filepath, or any other code-specific value.
  * We also trim this value even further to just a few words.
  *
- * Our goal is to remove this entirely before v1.0.0 is released, as we work
- * to add a proper error code system (see AstroErrorCodes for examples).
- *
- * TODO(fks): Remove around v1.0.0 release.
+ * This is only used for errors that do not come from us so we can get a basic
+ * and anonymous idea of what the error is about.
  */
 const ANONYMIZE_MESSAGE_REGEX = /^(\w| )+/;
 function anonymizeErrorMessage(msg: string): string | undefined {
 	const matchedMessage = msg.match(ANONYMIZE_MESSAGE_REGEX);
-	if (!matchedMessage || !matchedMessage[0]) {
+	if (!matchedMessage?.[0]) {
 		return undefined;
 	}
 	return matchedMessage[0].trim().substring(0, 20);
@@ -46,7 +45,7 @@ export function eventConfigError({
 	isFatal: boolean;
 }): { eventName: string; payload: ConfigErrorEventPayload }[] {
 	const payload: ConfigErrorEventPayload = {
-		code: AstroErrorCodes.ConfigError,
+		name: 'ZodError',
 		isFatal,
 		isConfig: true,
 		cliCommand: cmd,
@@ -64,12 +63,50 @@ export function eventError({
 	cmd: string;
 	isFatal: boolean;
 }): { eventName: string; payload: ErrorEventPayload }[] {
+	const errorData =
+		AstroError.is(err) && (AstroErrorData[err.name as keyof typeof AstroErrorData] as ErrorData);
+
 	const payload: ErrorEventPayload = {
-		code: err.code || AstroErrorCodes.UnknownError,
+		name: err.name,
 		plugin: err.plugin,
 		cliCommand: cmd,
 		isFatal: isFatal,
-		anonymousMessageHint: anonymizeErrorMessage(err.message),
+		anonymousMessageHint:
+			errorData && errorData.message
+				? getSafeErrorMessage(errorData.message)
+				: anonymizeErrorMessage(err.message),
 	};
 	return [{ eventName: EVENT_ERROR, payload }];
+}
+
+/**
+ * Safely get the error message from an error, even if it's a function.
+ */
+// eslint-disable-next-line @typescript-eslint/ban-types
+function getSafeErrorMessage(message: string | Function): string {
+	if (typeof message === 'string') {
+		return message;
+	} else {
+		return String.raw({
+			raw: extractStringFromFunction(message.toString()),
+		});
+	}
+
+	function extractStringFromFunction(func: string) {
+		const arrowIndex = func.indexOf('=>') + '=>'.length;
+
+		return func
+			.slice(arrowIndex)
+			.trim()
+			.slice(1, -1)
+			.replace(
+				/\${([^}]+)}/gm,
+				(str, match1) =>
+					`${match1
+						.split(/\.?(?=[A-Z])/)
+						.join('_')
+						.toUpperCase()}`
+			)
+			.replace(/\\`/g, '`');
+	}
 }

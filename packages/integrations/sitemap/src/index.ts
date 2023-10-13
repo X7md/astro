@@ -1,18 +1,19 @@
 import type { AstroConfig, AstroIntegration } from 'astro';
+import { fileURLToPath } from 'node:url';
 import {
 	EnumChangefreq,
-	LinkItem as LinkItemBase,
 	simpleSitemapAndIndex,
-	SitemapItemLoose,
+	type LinkItem as LinkItemBase,
+	type SitemapItemLoose,
 } from 'sitemap';
-import { fileURLToPath } from 'url';
 import { ZodError } from 'zod';
 
 import { generateSitemap } from './generate-sitemap.js';
 import { Logger } from './utils/logger.js';
 import { validateOptions } from './validate-options.js';
 
-export type ChangeFreq = EnumChangefreq;
+export { EnumChangefreq as ChangeFreqEnum } from 'sitemap';
+export type ChangeFreq = `${EnumChangefreq}`;
 export type SitemapItem = Pick<
 	SitemapItemLoose,
 	'url' | 'lastmod' | 'changefreq' | 'priority' | 'links'
@@ -48,9 +49,20 @@ function formatConfigErrorMessage(err: ZodError) {
 
 const PKG_NAME = '@astrojs/sitemap';
 const OUTFILE = 'sitemap-index.xml';
+const STATUS_CODE_PAGES = new Set(['404', '500']);
+
+function isStatusCodePage(pathname: string): boolean {
+	if (pathname.endsWith('/')) {
+		pathname = pathname.slice(0, -1);
+	}
+	const end = pathname.split('/').pop() ?? '';
+	return STATUS_CODE_PAGES.has(end);
+}
 
 const createPlugin = (options?: SitemapOptions): AstroIntegration => {
 	let config: AstroConfig;
+	const logger = new Logger(PKG_NAME);
+
 	return {
 		name: PKG_NAME,
 
@@ -59,10 +71,15 @@ const createPlugin = (options?: SitemapOptions): AstroIntegration => {
 				config = cfg;
 			},
 
-			'astro:build:done': async ({ dir, pages }) => {
-				const logger = new Logger(PKG_NAME);
-
+			'astro:build:done': async ({ dir, routes, pages }) => {
 				try {
+					if (!config.site) {
+						logger.warn(
+							'The Sitemap integration requires the `site` astro.config option. Skipping.'
+						);
+						return;
+					}
+
 					const opts = validateOptions(config.site, options);
 
 					const { filter, customPages, serialize, entryLimit } = opts;
@@ -71,17 +88,51 @@ const createPlugin = (options?: SitemapOptions): AstroIntegration => {
 					if (config.site) {
 						finalSiteUrl = new URL(config.base, config.site);
 					} else {
-						// eslint-disable-next-line no-console
 						console.warn(
 							'The Sitemap integration requires the `site` astro.config option. Skipping.'
 						);
 						return;
 					}
 
-					let pageUrls = pages.map((p) => {
-						const path = finalSiteUrl.pathname + p.pathname;
-						return new URL(path, finalSiteUrl).href;
-					});
+					let pageUrls = pages
+						.filter((p) => !isStatusCodePage(p.pathname))
+						.map((p) => {
+							if (p.pathname !== '' && !finalSiteUrl.pathname.endsWith('/'))
+								finalSiteUrl.pathname += '/';
+							const path = finalSiteUrl.pathname + p.pathname;
+							return new URL(path, finalSiteUrl).href;
+						});
+
+					let routeUrls = routes.reduce<string[]>((urls, r) => {
+						// Only expose pages, not endpoints or redirects
+						if (r.type !== 'page') return urls;
+
+						/**
+						 * Dynamic URLs have entries with `undefined` pathnames
+						 */
+						if (r.pathname) {
+							if (isStatusCodePage(r.pathname ?? r.route)) return urls;
+							/**
+							 * remove the initial slash from relative pathname
+							 * because `finalSiteUrl` always has trailing slash
+							 */
+							const path = finalSiteUrl.pathname + r.generate(r.pathname).substring(1);
+
+							let newUrl = new URL(path, finalSiteUrl).href;
+
+							if (config.trailingSlash === 'never') {
+								urls.push(newUrl);
+							} else if (config.build.format === 'directory' && !newUrl.endsWith('/')) {
+								urls.push(newUrl + '/');
+							} else {
+								urls.push(newUrl);
+							}
+						}
+
+						return urls;
+					}, []);
+
+					pageUrls = Array.from(new Set([...pageUrls, ...routeUrls, ...(customPages ?? [])]));
 
 					try {
 						if (filter) {
@@ -92,19 +143,8 @@ const createPlugin = (options?: SitemapOptions): AstroIntegration => {
 						return;
 					}
 
-					if (customPages) {
-						pageUrls = [...pageUrls, ...customPages];
-					}
-
 					if (pageUrls.length === 0) {
-						// offer suggestion for SSR users
-						if (config.output !== 'static') {
-							logger.warn(
-								`No pages found! We can only detect sitemap routes for "static" builds. Since you are using an SSR adapter, we recommend manually listing your sitemap routes using the "customPages" integration option.\n\nExample: \`sitemap({ customPages: ['https://example.com/route'] })\``
-							);
-						} else {
-							logger.warn(`No pages found!\n\`${OUTFILE}\` not created.`);
-						}
+						logger.warn(`No pages found!\n\`${OUTFILE}\` not created.`);
 						return;
 					}
 

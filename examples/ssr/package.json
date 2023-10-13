@@ -1,5 +1,6 @@
 {
   "name": "@example/ssr",
+  "type": "module",
   "version": "0.0.1",
   "private": true,
   "scripts": {
@@ -8,18 +9,12 @@
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
-    "server": "node server/server.mjs"
-  },
-  "devDependencies": {
-    "@astrojs/node": "^1.0.0",
-    "@astrojs/svelte": "^1.0.0",
-    "astro": "^1.1.2",
-    "concurrently": "^7.2.1",
-    "lightcookie": "^1.0.25",
-    "unocss": "^0.15.6",
-    "vite-imagetools": "^4.0.4"
+    "server": "node dist/server/entry.mjs"
   },
   "dependencies": {
-    "svelte": "^3.48.0"
+    "@astrojs/node": "^6.0.3",
+    "@astrojs/svelte": "^4.0.3",
+    "astro": "^3.3.0",
+    "svelte": "^4.2.0"
   }
 }

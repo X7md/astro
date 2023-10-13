@@ -1,4 +1,4 @@
-import { execSync } from 'child_process';
+import { execSync } from 'node:child_process';
 import type { BinaryLike } from 'node:crypto';
 import { createHash } from 'node:crypto';
 import detectPackageManager from 'which-pm-runs';
@@ -80,7 +80,7 @@ function getProjectIdFromGit(): string | null {
 	}
 }
 
-function getProjectId(isCI: boolean): Pick<ProjectInfo, 'isGit' | 'anonymousProjectId'> {
+function getProjectId(isCI: boolean): Pick<ProjectInfo, 'anonymousProjectId' | 'isGit'> {
 	const projectIdFromGit = getProjectIdFromGit();
 	if (projectIdFromGit) {
 		return {

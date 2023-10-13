@@ -1,6 +1,6 @@
 import './server-shim.js';
-import '@lit-labs/ssr/lib/render-lit-html.js';
 import { LitElementRenderer } from '@lit-labs/ssr/lib/lit-element-renderer.js';
+import * as parse5 from 'parse5';
 
 function isCustomElementTag(name) {
 	return typeof name === 'string' && /-/.test(name);
@@ -17,10 +17,10 @@ function getCustomElementConstructor(name) {
 
 async function isLitElement(Component) {
 	const Ctr = getCustomElementConstructor(Component);
-	return !!(Ctr && Ctr._$litElement$);
+	return !!Ctr?._$litElement$;
 }
 
-async function check(Component, _props, _children) {
+async function check(Component) {
 	// Lit doesn't support getting a tagName from a Constructor at this time.
 	// So this must be a string at the moment.
 	return !!(await isLitElement(Component));
@@ -35,10 +35,18 @@ function* render(Component, attrs, slots) {
 
 	// LitElementRenderer creates a new element instance, so copy over.
 	const Ctr = getCustomElementConstructor(tagName);
+	let shouldDeferHydration = false;
+
 	if (attrs) {
 		for (let [name, value] of Object.entries(attrs)) {
-			// check if this is a reactive property
-			if (name in Ctr.prototype) {
+			const isReactiveProperty = name in Ctr.prototype;
+			const isReflectedReactiveProperty = Ctr.elementProperties.get(name)?.reflect;
+
+			// Only defer hydration if we are setting a reactive property that cannot
+			// be reflected / serialized as a property.
+			shouldDeferHydration ||= isReactiveProperty && !isReflectedReactiveProperty;
+
+			if (isReactiveProperty) {
 				instance.setProperty(name, value);
 			} else {
 				instance.setAttribute(name, value);
@@ -48,22 +56,41 @@ function* render(Component, attrs, slots) {
 
 	instance.connectedCallback();
 
-	yield `<${tagName}`;
+	yield `<${tagName}${shouldDeferHydration ? ' defer-hydration' : ''}`;
 	yield* instance.renderAttributes();
 	yield `>`;
-	const shadowContents = instance.renderShadow({});
+	const shadowContents = instance.renderShadow({
+		elementRenderers: [LitElementRenderer],
+		customElementInstanceStack: [instance],
+		customElementHostStack: [],
+		deferHydration: false,
+	});
 	if (shadowContents !== undefined) {
-		yield '<template shadowroot="open">';
+		const { mode = 'open', delegatesFocus } = instance.shadowRootOptions ?? {};
+		// `delegatesFocus` is intentionally allowed to coerce to boolean to
+		// match web platform behavior.
+		const delegatesfocusAttr = delegatesFocus ? ' shadowrootdelegatesfocus' : '';
+		yield `<template shadowroot="${mode}" shadowrootmode="${mode}"${delegatesfocusAttr}>`;
 		yield* shadowContents;
 		yield '</template>';
 	}
 	if (slots) {
-		for (const [slot, value] of Object.entries(slots)) {
-			if (slot === 'default') {
-				yield `<astro-slot>${value || ''}</astro-slot>`;
-			} else {
-				yield `<astro-slot slot="${slot}">${value || ''}</astro-slot>`;
+		for (let [slot, value = ''] of Object.entries(slots)) {
+			if (slot !== 'default' && value) {
+				// Parse the value as a concatenated string
+				const fragment = parse5.parseFragment(`${value}`);
+
+				// Add the missing slot attribute to child Element nodes
+				for (const node of fragment.childNodes) {
+					if (node.tagName && !node.attrs.some(({ name }) => name === 'slot')) {
+						node.attrs.push({ name: 'slot', value: slot });
+					}
+				}
+
+				value = parse5.serialize(fragment);
 			}
+
+			yield value;
 		}
 	}
 	yield `</${tagName}>`;

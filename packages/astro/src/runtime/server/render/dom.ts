@@ -1,7 +1,7 @@
-import type { SSRResult } from '../../../@types/astro';
+import type { SSRResult } from '../../../@types/astro.js';
 
 import { markHTMLString } from '../escape.js';
-import { renderSlot } from './any.js';
+import { renderSlotToString } from './slot.js';
 import { toAttributeString } from './util.js';
 
 export function componentIsHTMLElement(Component: unknown) {
@@ -13,7 +13,7 @@ export async function renderHTMLElement(
 	constructor: typeof HTMLElement,
 	props: any,
 	slots: any
-) {
+): Promise<string> {
 	const name = getHTMLElementName(constructor);
 
 	let attrHTML = '';
@@ -23,7 +23,7 @@ export async function renderHTMLElement(
 	}
 
 	return markHTMLString(
-		`<${name}${attrHTML}>${await renderSlot(result, slots?.default)}</${name}>`
+		`<${name}${attrHTML}>${await renderSlotToString(result, slots?.default)}</${name}>`
 	);
 }
 

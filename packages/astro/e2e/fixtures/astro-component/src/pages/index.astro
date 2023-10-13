@@ -1,5 +1,7 @@
 ---
 import Hero from '../components/Hero.astro';
+import LinkedLib from '@e2e/astro-linked-lib'
+import HoistedScript from '@e2e/astro-linked-lib/HoistedScript'
 ---
 
 <html>
@@ -11,10 +13,16 @@ import Hero from '../components/Hero.astro';
 			<Hero title="Astro Components">
 				Lorem ipsum, dolor sit amet consectetur adipisicing elit.
 			</Hero>
+			<LinkedLib />
+			<HoistedScript />
 		</main>
   </body>
 </html>
 
 <script>
 	console.log('Hello, Astro!');
+</script>
+
+<script is:inline>
+	console.log('Hello, inline Astro!');
 </script>

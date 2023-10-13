@@ -1,169 +1,149 @@
-import type { MarkdownRenderingOptions } from '@astrojs/markdown-remark';
 import type {
+	AstroCookies,
 	ComponentInstance,
-	Params,
-	Props,
-	RouteData,
-	RuntimeMode,
-	SSRElement,
-	SSRLoadedRenderer,
-} from '../../@types/astro';
-import type { LogOptions } from '../logger/core.js';
-
-import { Fragment, renderPage } from '../../runtime/server/index.js';
-import { getParams } from '../routing/params.js';
+	EndpointHandler,
+	MiddlewareHandler,
+	MiddlewareResponseHandler,
+} from '../../@types/astro.js';
+import { renderPage as runtimeRenderPage } from '../../runtime/server/index.js';
+import { attachCookiesToResponse } from '../cookies/index.js';
+import { callEndpoint, createAPIContext } from '../endpoint/index.js';
+import { callMiddleware } from '../middleware/callMiddleware.js';
+import { redirectRouteGenerate, redirectRouteStatus, routeIsRedirect } from '../redirects/index.js';
+import type { RenderContext } from './context.js';
+import type { Environment } from './environment.js';
 import { createResult } from './result.js';
-import { callGetStaticPaths, findPathItemByKey, RouteCache } from './route-cache.js';
 
-interface GetParamsAndPropsOptions {
+export type RenderPage = {
 	mod: ComponentInstance;
-	route?: RouteData | undefined;
-	routeCache: RouteCache;
-	pathname: string;
-	logging: LogOptions;
-	ssr: boolean;
-}
+	renderContext: RenderContext;
+	env: Environment;
+	cookies: AstroCookies;
+};
 
-export const enum GetParamsAndPropsError {
-	NoMatchingStaticPath,
-}
-
-export async function getParamsAndProps(
-	opts: GetParamsAndPropsOptions
-): Promise<[Params, Props] | GetParamsAndPropsError> {
-	const { logging, mod, route, routeCache, pathname, ssr } = opts;
-	// Handle dynamic routes
-	let params: Params = {};
-	let pageProps: Props;
-	if (route && !route.pathname) {
-		if (route.params.length) {
-			const paramsMatch = route.pattern.exec(pathname);
-			if (paramsMatch) {
-				params = getParams(route.params)(paramsMatch);
-			}
-		}
-		let routeCacheEntry = routeCache.get(route);
-		// During build, the route cache should already be populated.
-		// During development, the route cache is filled on-demand and may be empty.
-		// TODO(fks): Can we refactor getParamsAndProps() to receive routeCacheEntry
-		// as a prop, and not do a live lookup/populate inside this lower function call.
-		if (!routeCacheEntry) {
-			routeCacheEntry = await callGetStaticPaths({ mod, route, isValidate: true, logging, ssr });
-			routeCache.set(route, routeCacheEntry);
-		}
-		const matchedStaticPath = findPathItemByKey(routeCacheEntry.staticPaths, params);
-		if (!matchedStaticPath && !ssr) {
-			return GetParamsAndPropsError.NoMatchingStaticPath;
-		}
-		// Note: considered using Object.create(...) for performance
-		// Since this doesn't inherit an object's properties, this caused some odd user-facing behavior.
-		// Ex. console.log(Astro.props) -> {}, but console.log(Astro.props.property) -> 'expected value'
-		// Replaced with a simple spread as a compromise
-		pageProps = matchedStaticPath?.props ? { ...matchedStaticPath.props } : {};
-	} else {
-		pageProps = {};
+export async function renderPage({ mod, renderContext, env, cookies }: RenderPage) {
+	if (routeIsRedirect(renderContext.route)) {
+		return new Response(null, {
+			status: redirectRouteStatus(renderContext.route, renderContext.request.method),
+			headers: {
+				location: redirectRouteGenerate(renderContext.route, renderContext.params),
+			},
+		});
 	}
-	return [params, pageProps];
-}
-
-export interface RenderOptions {
-	adapterName: string | undefined;
-	logging: LogOptions;
-	links: Set<SSRElement>;
-	styles?: Set<SSRElement>;
-	markdown: MarkdownRenderingOptions;
-	mod: ComponentInstance;
-	mode: RuntimeMode;
-	origin: string;
-	pathname: string;
-	scripts: Set<SSRElement>;
-	resolve: (s: string) => Promise<string>;
-	renderers: SSRLoadedRenderer[];
-	route?: RouteData;
-	routeCache: RouteCache;
-	site?: string;
-	ssr: boolean;
-	streaming: boolean;
-	request: Request;
-	status?: number;
-}
-
-export async function render(opts: RenderOptions): Promise<Response> {
-	const {
-		adapterName,
-		links,
-		styles,
-		logging,
-		origin,
-		markdown,
-		mod,
-		mode,
-		pathname,
-		scripts,
-		renderers,
-		request,
-		resolve,
-		route,
-		routeCache,
-		site,
-		ssr,
-		streaming,
-		status = 200,
-	} = opts;
-
-	const paramsAndPropsRes = await getParamsAndProps({
-		logging,
-		mod,
-		route,
-		routeCache,
-		pathname,
-		ssr,
-	});
-
-	if (paramsAndPropsRes === GetParamsAndPropsError.NoMatchingStaticPath) {
-		throw new Error(
-			`[getStaticPath] route pattern matched, but no matching static path found. (${pathname})`
-		);
-	}
-	const [params, pageProps] = paramsAndPropsRes;
 
 	// Validate the page component before rendering the page
-	const Component = await mod.default;
+	const Component = mod.default;
 	if (!Component)
 		throw new Error(`Expected an exported Astro component but received typeof ${typeof Component}`);
 
 	const result = createResult({
-		adapterName,
-		links,
-		styles,
-		logging,
-		markdown,
-		mode,
-		origin,
-		params,
-		props: pageProps,
-		pathname,
-		resolve,
-		renderers,
-		request,
-		site,
-		scripts,
-		ssr,
-		streaming,
-		status,
+		adapterName: env.adapterName,
+		links: renderContext.links,
+		styles: renderContext.styles,
+		logger: env.logger,
+		params: renderContext.params,
+		pathname: renderContext.pathname,
+		componentMetadata: renderContext.componentMetadata,
+		resolve: env.resolve,
+		renderers: env.renderers,
+		clientDirectives: env.clientDirectives,
+		compressHTML: env.compressHTML,
+		request: renderContext.request,
+		site: env.site,
+		scripts: renderContext.scripts,
+		ssr: env.ssr,
+		status: renderContext.status ?? 200,
+		cookies,
+		locals: renderContext.locals ?? {},
 	});
 
-	// Support `export const components` for `MDX` pages
-	if (typeof (mod as any).components === 'object') {
-		Object.assign(pageProps, { components: (mod as any).components });
+	// TODO: Remove in Astro 4.0
+	if (mod.frontmatter && typeof mod.frontmatter === 'object' && 'draft' in mod.frontmatter) {
+		env.logger.warn(
+			'astro',
+			`The drafts feature is deprecated and used in ${renderContext.route.component}. You should migrate to content collections instead. See https://docs.astro.build/en/guides/content-collections/#filtering-collection-queries for more information.`
+		);
 	}
 
-	// HACK: expose `Fragment` for all MDX components
-	if (typeof mod.default === 'function' && mod.default.name.startsWith('MDX')) {
-		Object.assign(pageProps, {
-			components: Object.assign((pageProps?.components as any) ?? {}, { Fragment }),
-		});
+	const response = await runtimeRenderPage(
+		result,
+		Component,
+		renderContext.props,
+		null,
+		env.streaming,
+		renderContext.route
+	);
+
+	// If there is an Astro.cookies instance, attach it to the response so that
+	// adapters can grab the Set-Cookie headers.
+	if (result.cookies) {
+		attachCookiesToResponse(response, result.cookies);
 	}
 
-	return await renderPage(result, Component, pageProps, null, streaming);
+	return response;
+}
+
+/**
+ * It attempts to render a route. A route can be a:
+ * - page
+ * - redirect
+ * - endpoint
+ *
+ * ## Errors
+ *
+ * It throws an error if the page can't be rendered.
+ * @deprecated Use the pipeline instead
+ */
+export async function tryRenderRoute<MiddlewareReturnType = Response>(
+	renderContext: Readonly<RenderContext>,
+	env: Readonly<Environment>,
+	mod: Readonly<ComponentInstance>,
+	onRequest?: MiddlewareHandler<MiddlewareReturnType>
+): Promise<Response> {
+	const apiContext = createAPIContext({
+		request: renderContext.request,
+		params: renderContext.params,
+		props: renderContext.props,
+		site: env.site,
+		adapterName: env.adapterName,
+	});
+
+	switch (renderContext.route.type) {
+		case 'page':
+		case 'redirect': {
+			if (onRequest) {
+				return await callMiddleware<Response>(
+					env.logger,
+					onRequest as MiddlewareResponseHandler,
+					apiContext,
+					() => {
+						return renderPage({
+							mod,
+							renderContext,
+							env,
+							cookies: apiContext.cookies,
+						});
+					}
+				);
+			} else {
+				return await renderPage({
+					mod,
+					renderContext,
+					env,
+					cookies: apiContext.cookies,
+				});
+			}
+		}
+		case 'endpoint': {
+			const result = await callEndpoint(
+				mod as any as EndpointHandler,
+				env,
+				renderContext,
+				onRequest
+			);
+			return result;
+		}
+		default:
+			throw new Error(`Couldn't find route of type [${renderContext.route.type}]`);
+	}
 }

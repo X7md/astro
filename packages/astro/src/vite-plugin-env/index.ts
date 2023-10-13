@@ -1,48 +1,65 @@
 import MagicString from 'magic-string';
-import { fileURLToPath } from 'url';
+import { fileURLToPath } from 'node:url';
 import type * as vite from 'vite';
 import { loadEnv } from 'vite';
-import type { AstroConfig } from '../@types/astro';
+import type { AstroConfig, AstroSettings } from '../@types/astro.js';
 
 interface EnvPluginOptions {
-	config: AstroConfig;
+	settings: AstroSettings;
 }
 
-function getPrivateEnv(viteConfig: vite.ResolvedConfig, astroConfig: AstroConfig) {
+function getPrivateEnv(
+	viteConfig: vite.ResolvedConfig,
+	astroConfig: AstroConfig
+): Record<string, string> {
 	let envPrefixes: string[] = ['PUBLIC_'];
 	if (viteConfig.envPrefix) {
 		envPrefixes = Array.isArray(viteConfig.envPrefix)
 			? viteConfig.envPrefix
 			: [viteConfig.envPrefix];
 	}
+
+	// Loads environment variables from `.env` files and `process.env`
 	const fullEnv = loadEnv(
 		viteConfig.mode,
 		viteConfig.envDir ?? fileURLToPath(astroConfig.root),
 		''
 	);
-	const privateKeys = Object.keys(fullEnv).filter((key) => {
-		// don't inject `PUBLIC_` variables, Vite handles that for us
-		for (const envPrefix of envPrefixes) {
-			if (key.startsWith(envPrefix)) return false;
-		}
 
-		// Otherwise, this is a private variable defined in an `.env` file
-		return true;
-	});
-	if (privateKeys.length === 0) {
-		return null;
+	const privateEnv: Record<string, string> = {};
+	for (const key in fullEnv) {
+		// Ignore public env var
+		if (envPrefixes.every((prefix) => !key.startsWith(prefix))) {
+			if (typeof process.env[key] !== 'undefined') {
+				let value = process.env[key];
+				// Replacements are always strings, so try to convert to strings here first
+				if (typeof value !== 'string') {
+					value = `${value}`;
+				}
+				// Boolean values should be inlined to support `export const prerender`
+				// We already know that these are NOT sensitive values, so inlining is safe
+				if (value === '0' || value === '1' || value === 'true' || value === 'false') {
+					privateEnv[key] = value;
+				} else {
+					privateEnv[key] = `process.env.${key}`;
+				}
+			} else {
+				privateEnv[key] = JSON.stringify(fullEnv[key]);
+			}
+		}
 	}
-	return Object.fromEntries(
-		privateKeys.map((key) => {
-			if (typeof process.env[key] !== 'undefined') return [key, `process.env.${key}`];
-			return [key, JSON.stringify(fullEnv[key])];
-		})
-	);
+	privateEnv.SITE = astroConfig.site ? JSON.stringify(astroConfig.site) : 'undefined';
+	privateEnv.SSR = JSON.stringify(true);
+	privateEnv.BASE_URL = astroConfig.base ? JSON.stringify(astroConfig.base) : 'undefined';
+	privateEnv.ASSETS_PREFIX = astroConfig.build.assetsPrefix
+		? JSON.stringify(astroConfig.build.assetsPrefix)
+		: 'undefined';
+	return privateEnv;
 }
 
 function getReferencedPrivateKeys(source: string, privateEnv: Record<string, any>): Set<string> {
 	const references = new Set<string>();
-	for (const key of Object.keys(privateEnv)) {
+	for (const key in privateEnv) {
 		if (source.includes(key)) {
 			references.add(key);
 		}
@@ -50,93 +67,83 @@ function getReferencedPrivateKeys(source: string, privateEnv: Record<string, any
 	return references;
 }
 
-export default function envVitePlugin({
-	config: astroConfig,
-}: EnvPluginOptions): vite.PluginOption {
-	let privateEnv: Record<string, any> | null;
-	let config: vite.ResolvedConfig;
-	let replacements: Record<string, string>;
-	let pattern: RegExp | undefined;
+export default function envVitePlugin({ settings }: EnvPluginOptions): vite.PluginOption {
+	let privateEnv: Record<string, string>;
+	let viteConfig: vite.ResolvedConfig;
+	const { config: astroConfig } = settings;
 	return {
 		name: 'astro:vite-plugin-env',
 		enforce: 'pre',
+		config() {
+			return {
+				define: {
+					'import.meta.env.BASE_URL': astroConfig.base
+						? JSON.stringify(astroConfig.base)
+						: 'undefined',
+					'import.meta.env.ASSETS_PREFIX': astroConfig.build.assetsPrefix
+						? JSON.stringify(astroConfig.build.assetsPrefix)
+						: 'undefined',
+				},
+			};
+		},
 		configResolved(resolvedConfig) {
-			config = resolvedConfig;
+			viteConfig = resolvedConfig;
 		},
 		async transform(source, id, options) {
-			const ssr = options?.ssr === true;
-
-			if (!ssr) {
+			if (!options?.ssr || !source.includes('import.meta.env')) {
 				return;
 			}
-
-			if (!source.includes('import.meta') || !/\benv\b/.test(source)) {
-				return;
-			}
-
-			if (typeof privateEnv === 'undefined') {
-				privateEnv = getPrivateEnv(config, astroConfig);
-				if (privateEnv) {
-					privateEnv.SITE = astroConfig.site ? `'${astroConfig.site}'` : 'undefined';
-					privateEnv.SSR = JSON.stringify(true);
-					privateEnv.BASE_URL = astroConfig.base ? `'${astroConfig.base}'` : undefined;
-					const entries = Object.entries(privateEnv).map(([key, value]) => [
-						`import.meta.env.${key}`,
-						value,
-					]);
-					replacements = Object.fromEntries(entries);
-					// These additional replacements are needed to match Vite
-					replacements = Object.assign(replacements, {
-						'import.meta.env.SITE': astroConfig.site ? `'${astroConfig.site}'` : 'undefined',
-						'import.meta.env.SSR': JSON.stringify(true),
-						'import.meta.env.BASE_URL': astroConfig.base ? `'${astroConfig.base}'` : undefined,
-						// This catches destructed `import.meta.env` calls,
-						// BUT we only want to inject private keys referenced in the file.
-						// We overwrite this value on a per-file basis.
-						'import.meta.env': `({})`,
-					});
-					pattern = new RegExp(
-						// Do not allow preceding '.', but do allow preceding '...' for spread operations
-						'(?<!(?<!\\.\\.)\\.)\\b(' +
-							Object.keys(replacements)
-								.map((str) => {
-									return str.replace(/[-[\]/{}()*+?.\\^$|]/g, '\\$&');
-								})
-								.join('|') +
-							// prevent trailing assignments
-							')\\b(?!\\s*?=[^=])',
-						'g'
-					);
-				}
-			}
-
-			if (!privateEnv || !pattern) return;
-			const references = getReferencedPrivateKeys(source, privateEnv);
-			if (references.size === 0) return;
 
 			// Find matches for *private* env and do our own replacement.
-			const s = new MagicString(source);
+			let s: MagicString | undefined;
+			const pattern = new RegExp(
+				// Do not allow preceding '.', but do allow preceding '...' for spread operations
+				'(?<!(?<!\\.\\.)\\.)\\b(' +
+					// Captures `import.meta.env.*` calls and replace with `privateEnv`
+					`import\\.meta\\.env\\.(.+?)` +
+					'|' +
+					// This catches destructed `import.meta.env` calls,
+					// BUT we only want to inject private keys referenced in the file.
+					// We overwrite this value on a per-file basis.
+					'import\\.meta\\.env' +
+					// prevent trailing assignments
+					')\\b(?!\\s*?=[^=])',
+				'g'
+			);
+			let references: Set<string>;
 			let match: RegExpExecArray | null;
 
 			while ((match = pattern.exec(source))) {
-				const start = match.index;
-				const end = start + match[0].length;
-				let replacement = '' + replacements[match[1]];
+				let replacement: string | undefined;
 				// If we match exactly `import.meta.env`, define _only_ referenced private variables
 				if (match[0] === 'import.meta.env') {
+					privateEnv ??= getPrivateEnv(viteConfig, astroConfig);
+					references ??= getReferencedPrivateKeys(source, privateEnv);
 					replacement = `(Object.assign(import.meta.env,{`;
 					for (const key of references.values()) {
 						replacement += `${key}:${privateEnv[key]},`;
 					}
 					replacement += '}))';
 				}
-				s.overwrite(start, end, replacement);
+				// If we match `import.meta.env.*`, replace with private env
+				else if (match[2]) {
+					privateEnv ??= getPrivateEnv(viteConfig, astroConfig);
+					replacement = privateEnv[match[2]];
+				}
+				if (replacement) {
+					const start = match.index;
+					const end = start + match[0].length;
+					s ??= new MagicString(source);
+					s.overwrite(start, end, replacement);
+				}
 			}
 
-			return {
-				code: s.toString(),
-				map: s.generateMap(),
-			};
+			if (s) {
+				return {
+					code: s.toString(),
+					map: s.generateMap({ hires: 'boundary' }),
+				};
+			}
 		},
 	};
 }

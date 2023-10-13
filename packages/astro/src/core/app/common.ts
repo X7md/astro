@@ -1,5 +1,5 @@
 import { deserializeRouteData } from '../routing/manifest/serialization.js';
-import type { RouteInfo, SerializedSSRManifest, SSRManifest } from './types';
+import type { RouteInfo, SerializedSSRManifest, SSRManifest } from './types.js';
 
 export function deserializeManifest(serializedManifest: SerializedSSRManifest): SSRManifest {
 	const routes: RouteInfo[] = [];
@@ -14,10 +14,14 @@ export function deserializeManifest(serializedManifest: SerializedSSRManifest): 
 	}
 
 	const assets = new Set<string>(serializedManifest.assets);
+	const componentMetadata = new Map(serializedManifest.componentMetadata);
+	const clientDirectives = new Map(serializedManifest.clientDirectives);
 
 	return {
 		...serializedManifest,
 		assets,
+		componentMetadata,
+		clientDirectives,
 		routes,
 	};
 }

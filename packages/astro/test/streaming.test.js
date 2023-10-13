@@ -1,13 +1,15 @@
-import { isWindows, loadFixture } from './test-utils.js';
 import { expect } from 'chai';
-import testAdapter from './test-adapter.js';
 import * as cheerio from 'cheerio';
+import testAdapter from './test-adapter.js';
+import { isWindows, loadFixture, streamAsyncIterator } from './test-utils.js';
 
 describe('Streaming', () => {
 	if (isWindows) return;
 
 	/** @type {import('./test-utils').Fixture} */
 	let fixture;
+
+	let decoder = new TextDecoder();
 
 	before(async () => {
 		fixture = await loadFixture({
@@ -32,11 +34,21 @@ describe('Streaming', () => {
 		it('Body is chunked', async () => {
 			let res = await fixture.fetch('/');
 			let chunks = [];
-			for await (const bytes of res.body) {
-				let chunk = bytes.toString('utf-8');
+			for await (const bytes of streamAsyncIterator(res.body)) {
+				let chunk = decoder.decode(bytes);
 				chunks.push(chunk);
 			}
 			expect(chunks.length).to.be.greaterThan(1);
+		});
+
+		it('Body of slots is chunked', async () => {
+			let res = await fixture.fetch('/slot');
+			let chunks = [];
+			for await (const bytes of streamAsyncIterator(res.body)) {
+				let chunk = decoder.decode(bytes);
+				chunks.push(chunk);
+			}
+			expect(chunks.length).to.equal(3);
 		});
 	});
 
@@ -60,8 +72,7 @@ describe('Streaming', () => {
 			const request = new Request('http://example.com/');
 			const response = await app.render(request);
 			let chunks = [];
-			let decoder = new TextDecoder();
-			for await (const bytes of response.body) {
+			for await (const bytes of streamAsyncIterator(response.body)) {
 				let chunk = decoder.decode(bytes);
 				chunks.push(chunk);
 			}
@@ -102,7 +113,7 @@ describe('Streaming disabled', () => {
 		it('Body is chunked', async () => {
 			let res = await fixture.fetch('/');
 			let chunks = [];
-			for await (const bytes of res.body) {
+			for await (const bytes of streamAsyncIterator(res.body)) {
 				let chunk = bytes.toString('utf-8');
 				chunks.push(chunk);
 			}

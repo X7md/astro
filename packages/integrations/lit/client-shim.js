@@ -8,11 +8,15 @@ async function polyfill() {
 }
 
 const polyfillCheckEl = new DOMParser()
-	.parseFromString(`<p><template shadowroot="open"></template></p>`, 'text/html', {
-		includeShadowRoots: true,
-	})
+	.parseFromString(
+		`<p><template shadowroot="open" shadowrootmode="open"></template></p>`,
+		'text/html',
+		{
+			includeShadowRoots: true,
+		}
+	)
 	.querySelector('p');
 
-if (!polyfillCheckEl || !polyfillCheckEl.shadowRoot) {
+if (!polyfillCheckEl?.shadowRoot) {
 	polyfill();
 }

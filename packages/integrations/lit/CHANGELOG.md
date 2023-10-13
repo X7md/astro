@@ -1,5 +1,125 @@
 # @astrojs/lit
 
+## 3.0.1
+
+### Patch Changes
+
+- [#8737](https://github.com/withastro/astro/pull/8737) [`6f60da805`](https://github.com/withastro/astro/commit/6f60da805e0014bc50dd07bef972e91c73560c3c) Thanks [@ematipico](https://github.com/ematipico)! - Add provenance statement when publishing the library from CI
+
+## 3.0.0
+
+### Major Changes
+
+- [#8188](https://github.com/withastro/astro/pull/8188) [`d0679a666`](https://github.com/withastro/astro/commit/d0679a666f37da0fca396d42b9b32bbb25d29312) Thanks [@ematipico](https://github.com/ematipico)! - Remove support for Node 16. The lowest supported version by Astro and all integrations is now v18.14.1. As a reminder, Node 16 will be deprecated on the 11th September 2023.
+
+- [#8179](https://github.com/withastro/astro/pull/8179) [`6011d52d3`](https://github.com/withastro/astro/commit/6011d52d38e43c3e3d52bc3bc41a60e36061b7b7) Thanks [@matthewp](https://github.com/matthewp)! - Astro 3.0 Release Candidate
+
+## 3.0.0-rc.1
+
+### Major Changes
+
+- [#8179](https://github.com/withastro/astro/pull/8179) [`6011d52d3`](https://github.com/withastro/astro/commit/6011d52d38e43c3e3d52bc3bc41a60e36061b7b7) Thanks [@matthewp](https://github.com/matthewp)! - Astro 3.0 Release Candidate
+
+## 3.0.0-beta.0
+
+### Major Changes
+
+- [`1eae2e3f7`](https://github.com/withastro/astro/commit/1eae2e3f7d693c9dfe91c8ccfbe606d32bf2fb81) Thanks [@Princesseuh](https://github.com/Princesseuh)! - Remove support for Node 16. The lowest supported version by Astro and all integrations is now v18.14.1. As a reminder, Node 16 will be deprecated on the 11th September 2023.
+
+## 2.1.1
+
+### Patch Changes
+
+- [#7985](https://github.com/withastro/astro/pull/7985) [`ec06dd9bb`](https://github.com/withastro/astro/commit/ec06dd9bbb29cc38e891517fbf884cb7083b3240) Thanks [@delucis](https://github.com/delucis)! - Fix formatting in Lit README
+
+## 2.1.0
+
+### Minor Changes
+
+- [#7373](https://github.com/withastro/astro/pull/7373) [`0986a44dd`](https://github.com/withastro/astro/commit/0986a44ddd2b48edbe318f6fceb7f4ce4670ce05) Thanks [@matthewp](https://github.com/matthewp)! - Upgrade lit dependencies
+
+## 2.0.2
+
+### Patch Changes
+
+- [#7104](https://github.com/withastro/astro/pull/7104) [`826e02890`](https://github.com/withastro/astro/commit/826e0289005f645b902375b98d5549c6a95ccafa) Thanks [@bluwy](https://github.com/bluwy)! - Specify `"files"` field to only publish necessary files
+
+## 2.0.1
+
+### Patch Changes
+
+- [#6752](https://github.com/withastro/astro/pull/6752) [`c7eb0d431`](https://github.com/withastro/astro/commit/c7eb0d431032edc5d4af72726d84e1c52ef36575) Thanks [@augustjk](https://github.com/augustjk)! - Provide `renderInfo` when rendering Lit components. Fixes issue with rendering nested components.
+
+## 2.0.0
+
+### Major Changes
+
+- [#6681](https://github.com/withastro/astro/pull/6681) [`4b077318f`](https://github.com/withastro/astro/commit/4b077318fbc21c4350cc21c380d96b54d302759c) Thanks [@e111077](https://github.com/e111077)! - Update to use `@lit-labs/ssr@^3`
+  **[BREAKING]** DOM shim required for Lit SSR has been greatly reduced. `window`, `document`, and other objects are no longer available in global. Most SSR-ready component code should not be affected but, if so, they can be fixed with optional chaining or by using the `isServer` environment checker from the `lit` package. See [lit.dev docs on authoring components for SSR].(https://lit.dev/docs/ssr/authoring/#browser-only-code)
+  **[BREAKING]** Adds compatibility with `lit@2.7.0` hydration behavior. Do not update if you're using `lit@2.6.1` or lower.
+  Includes support for template[shadowrootmode] support.
+
+## 1.3.0
+
+### Minor Changes
+
+- [#6213](https://github.com/withastro/astro/pull/6213) [`afbbc4d5b`](https://github.com/withastro/astro/commit/afbbc4d5bfafc1779bac00b41c2a1cb1c90f2808) Thanks [@Princesseuh](https://github.com/Princesseuh)! - Updated compilation settings to disable downlevelling for Node 14
+
+## 1.2.1
+
+### Patch Changes
+
+- [#6351](https://github.com/withastro/astro/pull/6351) [`26bf12ef3`](https://github.com/withastro/astro/commit/26bf12ef3c7ab874a23ac753f841f7bb329c9361) Thanks [@hrmcdonald](https://github.com/hrmcdonald)! - Render DSD attributes based on `shadowRootOptions`
+
+## 1.2.0
+
+### Minor Changes
+
+- [#6111](https://github.com/withastro/astro/pull/6111) [`ec38a8921`](https://github.com/withastro/astro/commit/ec38a8921f02a275949abcababe1b8afdf8184a2) Thanks [@e111077](https://github.com/e111077)! - Implement client:only functionality in Lit and add lit to the client:only warning
+
+## 1.1.2
+
+### Patch Changes
+
+- [#6080](https://github.com/withastro/astro/pull/6080) [`0db220415`](https://github.com/withastro/astro/commit/0db22041531d981a813a07f4c4e00cfb7ebddd51) Thanks [@e111077](https://github.com/e111077)! - Fixes Lit hydration not having the same reactive values as server (losing state upon hydration)
+
+- [#6055](https://github.com/withastro/astro/pull/6055) [`2567aa48b`](https://github.com/withastro/astro/commit/2567aa48bba8751cf7e10429555f1e85830c9169) Thanks [@e111077](https://github.com/e111077)! - Add forwards compatibility for streaming Declarative Shadow DOM
+
+## 1.1.1
+
+### Patch Changes
+
+- [#5478](https://github.com/withastro/astro/pull/5478) [`1c7eef308`](https://github.com/withastro/astro/commit/1c7eef308e808aa5ed4662b53e67ec8d1b814d1f) Thanks [@nemo0](https://github.com/nemo0)! - Update READMEs for consistency
+
+## 1.1.0
+
+### Minor Changes
+
+- [#5782](https://github.com/withastro/astro/pull/5782) [`1f92d64ea`](https://github.com/withastro/astro/commit/1f92d64ea35c03fec43aff64eaf704dc5a9eb30a) Thanks [@Princesseuh](https://github.com/Princesseuh)! - Only shim fetch if not already present
+
+- [#5791](https://github.com/withastro/astro/pull/5791) [`f7aa1ec25`](https://github.com/withastro/astro/commit/f7aa1ec25d1584f7abd421903fbef66b1c050e2a) Thanks [@ba55ie](https://github.com/ba55ie)! - Fix Lit slotted content
+
+## 1.0.2
+
+### Patch Changes
+
+- [#5782](https://github.com/withastro/astro/pull/5782) [`1f92d64ea`](https://github.com/withastro/astro/commit/1f92d64ea35c03fec43aff64eaf704dc5a9eb30a) Thanks [@Princesseuh](https://github.com/Princesseuh)! - Only shim fetch if not already present
+
+- [#5776](https://github.com/withastro/astro/pull/5776) [`6a31433ed`](https://github.com/withastro/astro/commit/6a31433ed79c7f84fd3ce602005b42ad95007d84) & [#5791](https://github.com/withastro/astro/pull/5791) [`f7aa1ec25`](https://github.com/withastro/astro/commit/f7aa1ec25d1584f7abd421903fbef66b1c050e2a) Thanks [@ba55ie](https://github.com/ba55ie)! - Fix Lit slotted content
+
+## 1.0.2-beta.0
+
+<details>
+<summary>See changes in 1.0.2-beta.0</summary>
+
+### Patch Changes
+
+- [#5782](https://github.com/withastro/astro/pull/5782) [`1f92d64ea`](https://github.com/withastro/astro/commit/1f92d64ea35c03fec43aff64eaf704dc5a9eb30a) Thanks [@Princesseuh](https://github.com/Princesseuh)! - Only shim fetch if not already present
+
+- [#5791](https://github.com/withastro/astro/pull/5791) [`f7aa1ec25`](https://github.com/withastro/astro/commit/f7aa1ec25d1584f7abd421903fbef66b1c050e2a) Thanks [@ba55ie](https://github.com/ba55ie)! - Fix Lit slotted content
+
+</details>
+
 ## 1.0.1
 
 ### Patch Changes
@@ -48,7 +168,7 @@
 
 ### Patch Changes
 
-- [#3511](https://github.com/withastro/astro/pull/3511) [`2fedb974`](https://github.com/withastro/astro/commit/2fedb974899b37a8d9ddabc476764a6d35d1e446) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Patch Lit's server shim to allow for `sass` compatability
+- [#3511](https://github.com/withastro/astro/pull/3511) [`2fedb974`](https://github.com/withastro/astro/commit/2fedb974899b37a8d9ddabc476764a6d35d1e446) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Patch Lit's server shim to allow for `sass` compatibility
 
 ## 0.1.4
 

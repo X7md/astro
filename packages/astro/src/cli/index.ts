@@ -1,25 +1,8 @@
 /* eslint-disable no-console */
-
 import * as colors from 'kleur/colors';
 import yargs from 'yargs-parser';
-import { z } from 'zod';
-import add from '../core/add/index.js';
-import build from '../core/build/index.js';
-import { openConfig } from '../core/config.js';
-import devServer from '../core/dev/index.js';
-import { collectErrorMetadata } from '../core/errors.js';
-import { debug, info, LogOptions, warn } from '../core/logger/core.js';
-import { enableVerboseLogging, nodeLogDestination } from '../core/logger/node.js';
-import { formatConfigErrorMessage, formatErrorMessage, printHelp } from '../core/messages.js';
-import preview from '../core/preview/index.js';
-import { ASTRO_VERSION, createSafeError } from '../core/util.js';
-import * as event from '../events/index.js';
-import { eventConfigError, eventError, telemetry } from '../events/index.js';
-import { check } from './check/index.js';
-import { openInBrowser } from './open.js';
-import * as telemetryHandler from './telemetry.js';
+import { ASTRO_VERSION } from '../core/constants.js';
 
-type Arguments = yargs.Arguments;
 type CLICommand =
 	| 'help'
 	| 'version'
@@ -28,12 +11,14 @@ type CLICommand =
 	| 'dev'
 	| 'build'
 	| 'preview'
-	| 'reload'
+	| 'sync'
 	| 'check'
+	| 'info'
 	| 'telemetry';
 
 /** Display --help flag */
-function printAstroHelp() {
+async function printAstroHelp() {
+	const { printHelp } = await import('../core/messages.js');
 	printHelp({
 		commandName: 'astro',
 		usage: '[command] [...flags]',
@@ -45,12 +30,16 @@ function printAstroHelp() {
 				['check', 'Check your project for errors.'],
 				['dev', 'Start the development server.'],
 				['docs', 'Open documentation in your web browser.'],
+				['info', 'List info about your current Astro setup.'],
 				['preview', 'Preview your build locally.'],
+				['sync', 'Generate content collection types.'],
 				['telemetry', 'Configure telemetry settings.'],
 			],
 			'Global Flags': [
 				['--config <path>', 'Specify your config file.'],
 				['--root <path>', 'Specify your project root folder.'],
+				['--site <url>', 'Specify your project site.'],
+				['--base <pathname>', 'Specify your project base.'],
 				['--verbose', 'Enable verbose logging.'],
 				['--silent', 'Disable all logging.'],
 				['--version', 'Show the version number and exit.'],
@@ -61,20 +50,27 @@ function printAstroHelp() {
 }
 
 /** Display --version flag */
-async function printVersion() {
+function printVersion() {
 	console.log();
 	console.log(`  ${colors.bgGreen(colors.black(` astro `))} ${colors.green(`v${ASTRO_VERSION}`)}`);
 }
 
 /** Determine which command the user requested */
-function resolveCommand(flags: Arguments): CLICommand {
+function resolveCommand(flags: yargs.Arguments): CLICommand {
 	const cmd = flags._[2] as string;
-	if (cmd === 'add') return 'add';
-	if (cmd === 'telemetry') return 'telemetry';
 	if (flags.version) return 'version';
-	else if (flags.help) return 'help';
 
-	const supportedCommands = new Set(['dev', 'build', 'preview', 'check', 'docs']);
+	const supportedCommands = new Set([
+		'add',
+		'sync',
+		'telemetry',
+		'dev',
+		'build',
+		'preview',
+		'check',
+		'docs',
+		'info',
+	]);
 	if (supportedCommands.has(cmd)) {
 		return cmd as CLICommand;
 	}
@@ -87,106 +83,91 @@ function resolveCommand(flags: Arguments): CLICommand {
  * to present user-friendly error output where the fn is called.
  **/
 async function runCommand(cmd: string, flags: yargs.Arguments) {
-	const root = flags.root;
-
+	// These commands can run directly without parsing the user config.
 	switch (cmd) {
 		case 'help':
-			printAstroHelp();
-			return process.exit(0);
+			await printAstroHelp();
+			return;
 		case 'version':
-			await printVersion();
-			return process.exit(0);
-	}
-
-	// logLevel
-	let logging: LogOptions = {
-		dest: nodeLogDestination,
-		level: 'info',
-	};
-	if (flags.verbose) {
-		logging.level = 'debug';
-		enableVerboseLogging();
-	} else if (flags.silent) {
-		logging.level = 'silent';
-	}
-
-	// Special CLI Commands: "add", "docs", "telemetry"
-	// These commands run before the user's config is parsed, and may have other special
-	// conditions that should be handled here, before the others.
-	//
-	switch (cmd) {
-		case 'add': {
-			telemetry.record(event.eventCliSession(cmd));
-			const packages = flags._.slice(3) as string[];
-			return await add(packages, { cwd: root, flags, logging, telemetry });
+			printVersion();
+			return;
+		case 'info': {
+			const { printInfo } = await import('./info/index.js');
+			await printInfo({ flags });
+			return;
 		}
 		case 'docs': {
-			telemetry.record(event.eventCliSession(cmd));
-			return await openInBrowser('https://docs.astro.build/');
+			const { docs } = await import('./docs/index.js');
+			await docs({ flags });
+			return;
 		}
 		case 'telemetry': {
 			// Do not track session start, since the user may be trying to enable,
 			// disable, or modify telemetry settings.
+			const { update } = await import('./telemetry/index.js');
 			const subcommand = flags._[3]?.toString();
-			return await telemetryHandler.update(subcommand, { flags, telemetry });
+			await update(subcommand, { flags });
+			return;
+		}
+		case 'sync': {
+			const { sync } = await import('./sync/index.js');
+			const exitCode = await sync({ flags });
+			return process.exit(exitCode);
 		}
 	}
 
-	let { astroConfig, userConfig, userConfigPath } = await openConfig({
-		cwd: root,
-		flags,
-		cmd,
-		logging,
-	});
-	telemetry.record(event.eventCliSession(cmd, userConfig, flags));
+	// In verbose/debug mode, we log the debug logs asap before any potential errors could appear
+	if (flags.verbose) {
+		const { enableVerboseLogging } = await import('../core/logger/node.js');
+		enableVerboseLogging();
+	}
 
-	// Common CLI Commands:
-	// These commands run normally. All commands are assumed to have been handled
+	// Start with a default NODE_ENV so Vite doesn't set an incorrect default when loading the Astro config
+	if (!process.env.NODE_ENV) {
+		process.env.NODE_ENV = cmd === 'dev' ? 'development' : 'production';
+	}
+
+	const { notify } = await import('./telemetry/index.js');
+	await notify();
+
+	// These commands uses the logging and user config. All commands are assumed to have been handled
 	// by the end of this switch statement.
 	switch (cmd) {
+		case 'add': {
+			const { add } = await import('./add/index.js');
+			const packages = flags._.slice(3) as string[];
+			await add(packages, { flags });
+			return;
+		}
 		case 'dev': {
-			async function startDevServer() {
-				const { watcher, stop } = await devServer(astroConfig, { logging, telemetry });
-
-				watcher.on('change', logRestartServerOnConfigChange);
-				watcher.on('unlink', logRestartServerOnConfigChange);
-				function logRestartServerOnConfigChange(changedFile: string) {
-					if (userConfigPath === changedFile) {
-						warn(logging, 'astro', 'Astro config updated. Restart server to see changes!');
-					}
-				}
-
-				watcher.on('add', async function restartServerOnNewConfigFile(addedFile: string) {
-					// if there was not a config before, attempt to resolve
-					if (!userConfigPath && addedFile.includes('astro.config')) {
-						const addedConfig = await openConfig({ cwd: root, flags, cmd, logging });
-						if (addedConfig.userConfigPath) {
-							info(logging, 'astro', 'Astro config detected. Restarting server...');
-							astroConfig = addedConfig.astroConfig;
-							userConfig = addedConfig.userConfig;
-							userConfigPath = addedConfig.userConfigPath;
-							await stop();
-							await startDevServer();
-						}
-					}
-				});
+			const { dev } = await import('./dev/index.js');
+			const server = await dev({ flags });
+			if (server) {
+				return await new Promise(() => {}); // lives forever
 			}
-			await startDevServer();
-			return await new Promise(() => {}); // lives forever
+			return;
 		}
-
 		case 'build': {
-			return await build(astroConfig, { logging, telemetry });
+			const { build } = await import('./build/index.js');
+			await build({ flags });
+			return;
 		}
-
-		case 'check': {
-			const ret = await check(astroConfig);
-			return process.exit(ret);
-		}
-
 		case 'preview': {
-			const server = await preview(astroConfig, { logging, telemetry });
-			return await server.closed(); // keep alive until the server is closed
+			const { preview } = await import('./preview/index.js');
+			const server = await preview({ flags });
+			if (server) {
+				return await server.closed(); // keep alive until the server is closed
+			}
+			return;
+		}
+		case 'check': {
+			const { check } = await import('./check/index.js');
+			const checkServer = await check(flags);
+			if (flags.watch) {
+				return await new Promise(() => {}); // lives forever
+			} else {
+				return process.exit(checkServer ? 1 : 0);
+			}
 		}
 	}
 
@@ -201,34 +182,7 @@ export async function cli(args: string[]) {
 	try {
 		await runCommand(cmd, flags);
 	} catch (err) {
+		const { throwAndExit } = await import('./throw-and-exit.js');
 		await throwAndExit(cmd, err);
 	}
-}
-
-/** Display error and exit */
-async function throwAndExit(cmd: string, err: unknown) {
-	let telemetryPromise: Promise<any>;
-	let errorMessage: string;
-	function exitWithErrorMessage() {
-		console.error(errorMessage);
-		process.exit(1);
-	}
-
-	if (err instanceof z.ZodError) {
-		telemetryPromise = telemetry.record(eventConfigError({ cmd, err, isFatal: true }));
-		errorMessage = formatConfigErrorMessage(err);
-	} else {
-		const errorWithMetadata = collectErrorMetadata(createSafeError(err));
-		telemetryPromise = telemetry.record(eventError({ cmd, err: errorWithMetadata, isFatal: true }));
-		errorMessage = formatErrorMessage(errorWithMetadata);
-	}
-
-	// Timeout the error reporter (very short) because the user is waiting.
-	// NOTE(fks): It is better that we miss some events vs. holding too long.
-	// TODO(fks): Investigate using an AbortController once we drop Node v14.
-	setTimeout(exitWithErrorMessage, 400);
-	// Wait for the telemetry event to send, then exit. Ignore any error.
-	await telemetryPromise
-		.catch((err2) => debug('telemetry', `record() error: ${err2.message}`))
-		.then(exitWithErrorMessage);
 }

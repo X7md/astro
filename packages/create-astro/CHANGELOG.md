@@ -1,5 +1,316 @@
 # create-astro
 
+## 4.2.1
+
+### Patch Changes
+
+- [#8634](https://github.com/withastro/astro/pull/8634) [`b64dd45c0`](https://github.com/withastro/astro/commit/b64dd45c0d641f9f2ed997e2cbdf8a6b0193195f) Thanks [@TheOtterlord](https://github.com/TheOtterlord)! - Fix `--yes` behaviour to prevent it overriding `--template`
+
+## 4.2.0
+
+### Minor Changes
+
+- [#8551](https://github.com/withastro/astro/pull/8551) [`1d5b3f079`](https://github.com/withastro/astro/commit/1d5b3f079d0b4aa5a5c46f97b8b724ab88497fbe) Thanks [@jacobthesheep](https://github.com/jacobthesheep)! - Adds `--yes` and `dry-run` flags to project-name and the `yes` flag to template.
+
+## 4.1.0
+
+### Minor Changes
+
+- [#8456](https://github.com/withastro/astro/pull/8456) [`ed952b4ce`](https://github.com/withastro/astro/commit/ed952b4cea6f60a4e158a5b20cc36f5e91a6b07f) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Improve startup performance by removing dependencies, lazily initializing async contextual values
+
+## 4.0.2
+
+### Patch Changes
+
+- [#8427](https://github.com/withastro/astro/pull/8427) [`b81ff8fce`](https://github.com/withastro/astro/commit/b81ff8fcefe6c30312d7b2050a63b1520d79b25f) Thanks [@aswind7](https://github.com/aswind7)! - trim project name of the user input
+
+- [#8306](https://github.com/withastro/astro/pull/8306) [`d2f2a11cd`](https://github.com/withastro/astro/commit/d2f2a11cdb42b0de79be21c798eda8e7e7b2a277) Thanks [@jacobthesheep](https://github.com/jacobthesheep)! - Support detecting Bun when logging messages with package manager information.
+
+## 4.0.1
+
+### Patch Changes
+
+- [#8292](https://github.com/withastro/astro/pull/8292) [`4e88ffd81`](https://github.com/withastro/astro/commit/4e88ffd813a3a9fa37b2ddd1a2eff181d4a99c0f) Thanks [@Princesseuh](https://github.com/Princesseuh)! - Correctly remove new `.codesandbox` folder when copying template
+
+## 4.0.0
+
+### Major Changes
+
+- [#8188](https://github.com/withastro/astro/pull/8188) [`d0679a666`](https://github.com/withastro/astro/commit/d0679a666f37da0fca396d42b9b32bbb25d29312) Thanks [@ematipico](https://github.com/ematipico)! - Remove support for Node 16. The lowest supported version by Astro and all integrations is now v18.14.1. As a reminder, Node 16 will be deprecated on the 11th September 2023.
+
+- [#8179](https://github.com/withastro/astro/pull/8179) [`6011d52d3`](https://github.com/withastro/astro/commit/6011d52d38e43c3e3d52bc3bc41a60e36061b7b7) Thanks [@matthewp](https://github.com/matthewp)! - Astro 3.0 Release Candidate
+
+## 4.0.0-rc.2
+
+### Major Changes
+
+- [#8179](https://github.com/withastro/astro/pull/8179) [`6011d52d3`](https://github.com/withastro/astro/commit/6011d52d38e43c3e3d52bc3bc41a60e36061b7b7) Thanks [@matthewp](https://github.com/matthewp)! - Astro 3.0 Release Candidate
+
+## 4.0.0-beta.1
+
+### Patch Changes
+
+- [#7944](https://github.com/withastro/astro/pull/7944) [`dff0f0f8d`](https://github.com/withastro/astro/commit/dff0f0f8ddd531c5d92a90ac00fdb86d71f77509) Thanks [@colinhacks](https://github.com/colinhacks)! - Update 'dev' command for Bun users
+
+- [#8102](https://github.com/withastro/astro/pull/8102) [`e6e1de4f0`](https://github.com/withastro/astro/commit/e6e1de4f08ddba3a7703136a81f275de1976dc9e) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Verify internet connection and that `--template` exists before continuing
+
+## 4.0.0-beta.0
+
+### Major Changes
+
+- [`1eae2e3f7`](https://github.com/withastro/astro/commit/1eae2e3f7d693c9dfe91c8ccfbe606d32bf2fb81) Thanks [@Princesseuh](https://github.com/Princesseuh)! - Remove support for Node 16. The lowest supported version by Astro and all integrations is now v18.14.1. As a reminder, Node 16 will be deprecated on the 11th September 2023.
+
+## 3.2.2
+
+### Patch Changes
+
+- [#7944](https://github.com/withastro/astro/pull/7944) [`dff0f0f8d`](https://github.com/withastro/astro/commit/dff0f0f8ddd531c5d92a90ac00fdb86d71f77509) Thanks [@colinhacks](https://github.com/colinhacks)! - Update 'dev' command for Bun users
+
+- [#8102](https://github.com/withastro/astro/pull/8102) [`e6e1de4f0`](https://github.com/withastro/astro/commit/e6e1de4f08ddba3a7703136a81f275de1976dc9e) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Verify internet connection and that `--template` exists before continuing
+
+## 3.2.1
+
+### Patch Changes
+
+- [#8089](https://github.com/withastro/astro/pull/8089) [`04755e846`](https://github.com/withastro/astro/commit/04755e84658ea10914a09f3d07f302267326d610) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Fix install step to avoid uncaught errors
+
+## 3.2.0
+
+### Minor Changes
+
+- [#8077](https://github.com/withastro/astro/pull/8077) [`44cf30a25`](https://github.com/withastro/astro/commit/44cf30a25209b331e6e8a95a4b40a768ede3604a) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Reduce dependency installation size, swap `execa` for light `node:child_process` wrapper
+
+## 3.1.13
+
+### Patch Changes
+
+- [#8028](https://github.com/withastro/astro/pull/8028) [`8292c4131`](https://github.com/withastro/astro/commit/8292c41311ec41d9d50921fbb2bdeed69e039443) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Improve yarn berry support
+
+## 3.1.12
+
+### Patch Changes
+
+- [#7993](https://github.com/withastro/astro/pull/7993) [`315d58f27`](https://github.com/withastro/astro/commit/315d58f27b022c9d4285cf13f445ed18c26c327e) Thanks [@delucis](https://github.com/delucis)! - Add support for more Starlight templates
+
+## 3.1.11
+
+### Patch Changes
+
+- [#7939](https://github.com/withastro/astro/pull/7939) [`89cd4b877`](https://github.com/withastro/astro/commit/89cd4b877e870ce4a263dd45f42f818fd2c4d5a6) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Handle error state for version number
+
+## 3.1.10
+
+### Patch Changes
+
+- [#7580](https://github.com/withastro/astro/pull/7580) [`2ca5bdde2`](https://github.com/withastro/astro/commit/2ca5bdde2b1acc2be1586a99686a9a48cdef65dc) Thanks [@sankethchebbi](https://github.com/sankethchebbi)! - Update dependency installation grammar
+
+## 3.1.9
+
+### Patch Changes
+
+- [#7527](https://github.com/withastro/astro/pull/7527) [`9e2426f75`](https://github.com/withastro/astro/commit/9e2426f75637a6318961f483de90b635f3fdadeb) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Default registry logic to fallback to NPM if registry command fails (sorry, Bun users!)
+
+- [#7539](https://github.com/withastro/astro/pull/7539) [`1170877b5`](https://github.com/withastro/astro/commit/1170877b51aaa13203e8c488dcf4e39d1b5553ee) Thanks [@jc1144096387](https://github.com/jc1144096387)! - Update registry logic, improving edge cases (http support, redirects, registries ending with '/')
+
+## 3.1.8
+
+### Patch Changes
+
+- [#7435](https://github.com/withastro/astro/pull/7435) [`3f9f5c117`](https://github.com/withastro/astro/commit/3f9f5c117e4e9e4a0c0a648cb6db9a3073cd5727) Thanks [@bholmesdev](https://github.com/bholmesdev)! - Fix registry failures using unexpected package managers when running create-astro
+
+## 3.1.7
+
+### Patch Changes
+
+- [#7326](https://github.com/withastro/astro/pull/7326) [`1430ffb47`](https://github.com/withastro/astro/commit/1430ffb4734edbb67cbeaaee7e89a9f78e00473c) Thanks [@calebdwilliams](https://github.com/calebdwilliams)! - Ensure create-astro respects package manager registry configuration
+
+## 3.1.6
+
+### Patch Changes
+
+- [#7277](https://github.com/withastro/astro/pull/7277) [`229affca4`](https://github.com/withastro/astro/commit/229affca405ce77bf80bcea6a91891f689a3161b) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Add `starlight` template alias
+
+## 3.1.5
+
+### Patch Changes
+
+- [#7086](https://github.com/withastro/astro/pull/7086) [`c5f1275e9`](https://github.com/withastro/astro/commit/c5f1275e9d2f212a08e56bc25e0b59c7d7e9f11d) Thanks [@MoustaphaDev](https://github.com/MoustaphaDev)! - Fix create astro regression
+
+## 3.1.4
+
+### Patch Changes
+
+- [#7052](https://github.com/withastro/astro/pull/7052) [`8c14bffbd`](https://github.com/withastro/astro/commit/8c14bffbd9ea63bc4b4e9f9417352fdf4e7e65b4) Thanks [@ematipico](https://github.com/ematipico)! - Don't exit if dependencies fail to install
+
+## 3.1.3
+
+### Patch Changes
+
+- [#6682](https://github.com/withastro/astro/pull/6682) [`335602344`](https://github.com/withastro/astro/commit/33560234437647f2d768578e7b285c858bff7898) Thanks [@andremralves](https://github.com/andremralves)! - add validation for non-printable characters
+
+## 3.1.2
+
+### Patch Changes
+
+- [#6677](https://github.com/withastro/astro/pull/6677) [`4a3262060`](https://github.com/withastro/astro/commit/4a32620600966ea89ddb5e1669d89a53e85ccf9a) Thanks [@bholmesdev](https://github.com/bholmesdev)! - Fix: Log an error when passing a `--template` that does not exist
+
+## 3.1.1
+
+### Patch Changes
+
+- [#6594](https://github.com/withastro/astro/pull/6594) [`a661907b4`](https://github.com/withastro/astro/commit/a661907b40e76aa56e7d7bd7e745bb16456b13e7) Thanks [@btea](https://github.com/btea)! - wrap `projectDir` in quotes if it contains spaces
+
+## 3.1.0
+
+### Minor Changes
+
+- [#6213](https://github.com/withastro/astro/pull/6213) [`afbbc4d5b`](https://github.com/withastro/astro/commit/afbbc4d5bfafc1779bac00b41c2a1cb1c90f2808) Thanks [@Princesseuh](https://github.com/Princesseuh)! - Updated compilation settings to disable downlevelling for Node 14
+
+## 3.0.5
+
+### Patch Changes
+
+- [#6375](https://github.com/withastro/astro/pull/6375) [`754c5ca9a`](https://github.com/withastro/astro/commit/754c5ca9aa93d4e8674059ce79f6b694c147db83) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Respect original `package.json` indentation
+
+## 3.0.4
+
+### Patch Changes
+
+- [#6352](https://github.com/withastro/astro/pull/6352) [`c87c16cfa`](https://github.com/withastro/astro/commit/c87c16cfaddea3a05af87c3258d57ef1a31516f7) Thanks [@SerekKiri](https://github.com/SerekKiri)! - Add missing flags to help command
+
+## 3.0.3
+
+### Patch Changes
+
+- [#6314](https://github.com/withastro/astro/pull/6314) [`7f61e8fe3`](https://github.com/withastro/astro/commit/7f61e8fe36b62a1833180c18b6f4304e9a01fce4) Thanks [@MilesPernicious](https://github.com/MilesPernicious)! - Prompt for git initialization last, so all configurations can get added to the initial commit
+
+- [#6294](https://github.com/withastro/astro/pull/6294) [`d0dbee872`](https://github.com/withastro/astro/commit/d0dbee872fd09800fba644ccbf4011ce01149706) Thanks [@liruifengv](https://github.com/liruifengv)! - `create-astro` help info add `--typescript` flag
+
+## 3.0.2
+
+### Patch Changes
+
+- [#6278](https://github.com/withastro/astro/pull/6278) [`0f5d122cd`](https://github.com/withastro/astro/commit/0f5d122cd538b65ec7208ddae5e60cfaddaf4b2c) Thanks [@Princesseuh](https://github.com/Princesseuh)! - Revert to giget 1.0.0 until upstream issue is fixed
+
+## 3.0.1
+
+### Patch Changes
+
+- [#6266](https://github.com/withastro/astro/pull/6266) [`066b4b4ef`](https://github.com/withastro/astro/commit/066b4b4efcde2320d29040c5bd385c67f30c701a) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Improve error handling during tasks that display a spinner
+
+## 3.0.0
+
+### Major Changes
+
+- [#6082](https://github.com/withastro/astro/pull/6082) [`8d2187d8b`](https://github.com/withastro/astro/commit/8d2187d8b8587b2a3a0207d9ffa8667c43686436) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Redesigned `create-astro` experience
+
+## 2.0.2
+
+### Patch Changes
+
+- [#5953](https://github.com/withastro/astro/pull/5953) [`5c64324c0`](https://github.com/withastro/astro/commit/5c64324c0a1b06e836c3d53668940faca4cb517d) Thanks [@ZermattChris](https://github.com/ZermattChris)! - Check for a pre-existing .git directory and if found, skip trying to create a new one.
+
+## 2.0.1
+
+### Patch Changes
+
+- [#5958](https://github.com/withastro/astro/pull/5958) [`d0d7f6118`](https://github.com/withastro/astro/commit/d0d7f6118299bf328de5abd0b66450d8ac620da3) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Fix typescript prompt handling
+
+## 2.0.0
+
+### Major Changes
+
+- [#5782](https://github.com/withastro/astro/pull/5782) [`1f92d64ea`](https://github.com/withastro/astro/commit/1f92d64ea35c03fec43aff64eaf704dc5a9eb30a) Thanks [@Princesseuh](https://github.com/Princesseuh)! - Remove support for Node 14. Minimum supported Node version is now >=16.12.0
+
+### Patch Changes
+
+- [#5898](https://github.com/withastro/astro/pull/5898) [`d8919b1a2`](https://github.com/withastro/astro/commit/d8919b1a2197616b70ec57f0fb00b0bde6943e43) Thanks [@TheOtterlord](https://github.com/TheOtterlord)! - Support headless runs with `-y` / `--yes`
+
+- [#5920](https://github.com/withastro/astro/pull/5920) [`f27bb3d79`](https://github.com/withastro/astro/commit/f27bb3d79f9774f01037e60e656b1f9d8e03367d) Thanks [@delucis](https://github.com/delucis)! - Improve error message for third-party template 404s
+
+## 2.0.0-beta.1
+
+<details>
+<summary>See changes in 2.0.0-beta.1</summary>
+
+### Patch Changes
+
+- [#5898](https://github.com/withastro/astro/pull/5898) [`d8919b1a2`](https://github.com/withastro/astro/commit/d8919b1a2197616b70ec57f0fb00b0bde6943e43) Thanks [@TheOtterlord](https://github.com/TheOtterlord)! - Support headless runs with `-y` / `--yes`
+
+- [#5920](https://github.com/withastro/astro/pull/5920) [`f27bb3d79`](https://github.com/withastro/astro/commit/f27bb3d79f9774f01037e60e656b1f9d8e03367d) Thanks [@delucis](https://github.com/delucis)! - Improve error message for third-party template 404s
+
+</details>
+
+## 2.0.0-beta.0
+
+<details>
+<summary>See changes in 2.0.0-beta.0</summary>
+
+### Major Changes
+
+- [#5782](https://github.com/withastro/astro/pull/5782) [`1f92d64ea`](https://github.com/withastro/astro/commit/1f92d64ea35c03fec43aff64eaf704dc5a9eb30a) Thanks [@Princesseuh](https://github.com/Princesseuh)! - Remove support for Node 14. Minimum supported Node version is now >=16.12.0
+
+</details>
+
+## 1.2.4
+
+### Patch Changes
+
+- [#5579](https://github.com/withastro/astro/pull/5579) [`2c2c65297`](https://github.com/withastro/astro/commit/2c2c65297a18c52691f09621ead55144efd601d4) Thanks [@yuhang-dong](https://github.com/yuhang-dong)! - Upgrade giget to support env proxy config
+
+- [#5616](https://github.com/withastro/astro/pull/5616) [`61302ab7a`](https://github.com/withastro/astro/commit/61302ab7a09cc4c298c903d725e35355eb069497) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Skip Houston on Windows until we can debug the prompt issue
+
+## 1.2.3
+
+### Patch Changes
+
+- [#5404](https://github.com/withastro/astro/pull/5404) [`505abfd64`](https://github.com/withastro/astro/commit/505abfd6430b1f71e52d10b02bf9beb5847df8b6) Thanks [@liruifengv](https://github.com/liruifengv)! - fix error when don't have template input
+
+## 1.2.2
+
+### Patch Changes
+
+- [#5319](https://github.com/withastro/astro/pull/5319) [`b211eadef`](https://github.com/withastro/astro/commit/b211eadeffd6260700254c1492c8e6528d279ad1) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Fix bug with `setRawMode`. Respect `--skip-houston` in all cases.
+
+## 1.2.1
+
+### Patch Changes
+
+- [#5240](https://github.com/withastro/astro/pull/5240) [`d9be7e36b`](https://github.com/withastro/astro/commit/d9be7e36b872eb48516dc9d0d5c9d333aac4950b) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Improve error messages when `create-astro` fails
+
+- [#5226](https://github.com/withastro/astro/pull/5226) [`641b6d7d5`](https://github.com/withastro/astro/commit/641b6d7d583886fde9529f296846d7e0a50e8624) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Allow Windows users to pass `--fancy` to enable full unicode support
+
+## 1.2.0
+
+### Minor Changes
+
+- [#5088](https://github.com/withastro/astro/pull/5088) [`040837628`](https://github.com/withastro/astro/commit/04083762810a1a9e078a7e68edab945c8063b1ab) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Introducing your new automated assistant: Houston! 🎉
+
+  ```
+  ╭─────╮  Houston:
+  │ ◠ ◡ ◠  Initiating launch sequence... right... now!
+  ╰─────╯
+  ```
+
+  Updates template and TypeScript prompts for clarity and friendliness.
+
+  Migrates template copying from [`degit`](https://github.com/Rich-Harris/degit) (unmaintained) to [`giget`](https://github.com/unjs/giget) for stability.
+
+## 1.1.0
+
+### Minor Changes
+
+- [#4810](https://github.com/withastro/astro/pull/4810) [`7481ffda0`](https://github.com/withastro/astro/commit/7481ffda028d9028d8e28bc7c6e9960ab80acf0f) Thanks [@mrienstra](https://github.com/mrienstra)! - Always write chosen config to `tsconfig.json`.
+
+  - Before: Only when `strict` & `strictest` was selected
+  - After: Also when `base` is selected (via "Relaxed" or "I prefer not to use TypeScript")
+
+## 1.0.2
+
+### Patch Changes
+
+- [#4805](https://github.com/withastro/astro/pull/4805) [`c84d85ba4`](https://github.com/withastro/astro/commit/c84d85ba4d85f250d87bbc98c74665992f6c2768) Thanks [@HiDeoo](https://github.com/HiDeoo)! - Add support for running in cloned empty git repository
+
 ## 1.0.1
 
 ### Patch Changes
@@ -204,7 +515,7 @@
 
 ### Patch Changes
 
-- 0eeb2534: change rm to unlink for node 12 compatability
+- 0eeb2534: change rm to unlink for node 12 compatibility
 
 ## 0.6.2
 
@@ -255,7 +566,7 @@
 
 ### Minor Changes
 
-- 36e104b: Use new client: prefix for component exmaples
+- 36e104b: Use new client: prefix for component examples
 
 ## 0.4.0
 

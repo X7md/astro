@@ -1,17 +1,11 @@
-import { renderTemplate } from './astro.js';
-
-export { renderSlot } from './any.js';
-export { renderAstroComponent, renderTemplate, renderToString } from './astro.js';
-export { Fragment, Renderer, stringifyChunk } from './common.js';
-export { renderComponent } from './component.js';
+export { createHeadAndContent, renderTemplate, renderToString } from './astro/index.js';
+export type { AstroComponentFactory, AstroComponentInstance } from './astro/index.js';
+export { Fragment, Renderer, chunkToByteArray, chunkToString } from './common.js';
+export { renderComponent, renderComponentToString } from './component.js';
 export { renderHTMLElement } from './dom.js';
 export { maybeRenderHead, renderHead } from './head.js';
+export type { RenderInstruction } from './instruction.js';
 export { renderPage } from './page.js';
-export type { RenderInstruction } from './types';
+export { renderSlot, renderSlotToString, type ComponentSlots } from './slot.js';
+export { renderScriptElement, renderUniqueStylesheet } from './tags.js';
 export { addAttribute, defineScriptVars, voidElementNames } from './util.js';
-
-// The callback passed to to $$createComponent
-export interface AstroComponentFactory {
-	(result: any, props: any, slots: any): ReturnType<typeof renderTemplate> | Response;
-	isAstroComponentFactory?: boolean;
-}

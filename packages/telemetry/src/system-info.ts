@@ -1,4 +1,4 @@
-import { isCI, name as ciName } from 'ci-info';
+import { name as ciName, isCI } from 'ci-info';
 import isDocker from 'is-docker';
 import isWSL from 'is-wsl';
 import os from 'node:os';
@@ -52,6 +52,7 @@ export function getSystemInfo(versions: { viteVersion: string; astroVersion: str
 	}
 
 	const cpus = os.cpus() || [];
+
 	meta = {
 		// Version information
 		nodeVersion: process.version.replace(/^v?/, ''),
@@ -73,5 +74,5 @@ export function getSystemInfo(versions: { viteVersion: string; astroVersion: str
 		ciName,
 	};
 
-	return meta!;
+	return meta;
 }

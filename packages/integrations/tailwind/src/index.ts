@@ -1,76 +1,79 @@
-import load from '@proload/core';
 import type { AstroIntegration } from 'astro';
 import autoprefixerPlugin from 'autoprefixer';
-import path from 'path';
-import tailwindPlugin, { Config as TailwindConfig } from 'tailwindcss';
-import resolveConfig from 'tailwindcss/resolveConfig.js';
-import { fileURLToPath } from 'url';
+import type { ResultPlugin } from 'postcss-load-config';
+import tailwindPlugin from 'tailwindcss';
+import type { CSSOptions, UserConfig } from 'vite';
 
-function getDefaultTailwindConfig(srcUrl: URL): TailwindConfig {
-	return resolveConfig({
-		theme: {
-			extend: {},
-		},
-		plugins: [],
-		content: [path.join(fileURLToPath(srcUrl), `**`, `*.{astro,html,js,jsx,svelte,ts,tsx,vue}`)],
-		presets: undefined, // enable Tailwind's default preset
-	}) as TailwindConfig;
-}
-
-async function getUserConfig(root: URL, configPath?: string) {
-	const resolvedRoot = fileURLToPath(root);
-	let userConfigPath: string | undefined;
-
-	if (configPath) {
-		const configPathWithLeadingSlash = /^\.*\//.test(configPath) ? configPath : `./${configPath}`;
-		userConfigPath = fileURLToPath(new URL(configPathWithLeadingSlash, root));
+async function getPostCssConfig(
+	root: UserConfig['root'],
+	postcssInlineOptions: CSSOptions['postcss']
+) {
+	let postcssConfigResult;
+	// Check if postcss config is not inlined
+	if (!(typeof postcssInlineOptions === 'object' && postcssInlineOptions !== null)) {
+		let { default: postcssrc } = await import('postcss-load-config');
+		const searchPath = typeof postcssInlineOptions === 'string' ? postcssInlineOptions : root!;
+		try {
+			postcssConfigResult = await postcssrc({}, searchPath);
+		} catch (e) {
+			postcssConfigResult = null;
+		}
 	}
-
-	return await load('tailwind', { mustExist: false, cwd: resolvedRoot, filePath: userConfigPath });
+	return postcssConfigResult;
 }
 
-type TailwindOptions =
-	| {
-			config?: {
-				/**
-				 * Path to your tailwind config file
-				 * @default 'tailwind.config.js'
-				 */
-				path?: string;
-				/**
-				 * Apply Tailwind's base styles
-				 * Disabling this is useful when further customization of Tailwind styles
-				 * and directives is required. See {@link https://tailwindcss.com/docs/functions-and-directives#tailwind Tailwind's docs}
-				 * for more details on directives and customization.
-				 * @default: true
-				 */
-				applyBaseStyles?: boolean;
-			};
-	  }
-	| undefined;
+async function getViteConfiguration(
+	tailwindConfigPath: string | undefined,
+	viteConfig: UserConfig
+) {
+	// We need to manually load postcss config files because when inlining the tailwind and autoprefixer plugins,
+	// that causes vite to ignore postcss config files
+	const postcssConfigResult = await getPostCssConfig(viteConfig.root, viteConfig.css?.postcss);
+
+	const postcssOptions = postcssConfigResult?.options ?? {};
+	const postcssPlugins = postcssConfigResult?.plugins?.slice() ?? [];
+
+	// @ts-expect-error Tailwind plugin types are wrong
+	postcssPlugins.push(tailwindPlugin(tailwindConfigPath) as ResultPlugin);
+	postcssPlugins.push(autoprefixerPlugin());
+
+	return {
+		css: {
+			postcss: {
+				options: postcssOptions,
+				plugins: postcssPlugins,
+			},
+		},
+	};
+}
+
+type TailwindOptions = {
+	/**
+	 * Path to your tailwind config file
+	 * @default 'tailwind.config.mjs'
+	 */
+	configFile?: string;
+	/**
+	 * Apply Tailwind's base styles
+	 * Disabling this is useful when further customization of Tailwind styles
+	 * and directives is required. See {@link https://tailwindcss.com/docs/functions-and-directives#tailwind Tailwind's docs}
+	 * for more details on directives and customization.
+	 * @default true
+	 */
+	applyBaseStyles?: boolean;
+};
 
 export default function tailwindIntegration(options?: TailwindOptions): AstroIntegration {
-	const applyBaseStyles = options?.config?.applyBaseStyles ?? true;
-	const customConfigPath = options?.config?.path;
+	const applyBaseStyles = options?.applyBaseStyles ?? true;
+	const customConfigPath = options?.configFile;
 	return {
 		name: '@astrojs/tailwind',
 		hooks: {
-			'astro:config:setup': async ({ config, injectScript }) => {
+			'astro:config:setup': async ({ config, updateConfig, injectScript }) => {
 				// Inject the Tailwind postcss plugin
-				const userConfig = await getUserConfig(config.root, customConfigPath);
-
-				if (customConfigPath && !userConfig?.value) {
-					throw new Error(
-						`Could not find a Tailwind config at ${JSON.stringify(
-							customConfigPath
-						)}. Does the file exist?`
-					);
-				}
-
-				const tailwindConfig: TailwindConfig =
-					(userConfig?.value as TailwindConfig) ?? getDefaultTailwindConfig(config.srcDir);
-				config.style.postcss.plugins.push(tailwindPlugin(tailwindConfig));
-				config.style.postcss.plugins.push(autoprefixerPlugin);
+				updateConfig({
+					vite: await getViteConfiguration(customConfigPath, config.vite),
+				});
 
 				if (applyBaseStyles) {
 					// Inject the Tailwind base import

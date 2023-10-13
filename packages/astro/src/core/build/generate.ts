@@ -1,71 +1,93 @@
-import fs from 'fs';
 import * as colors from 'kleur/colors';
 import { bgGreen, black, cyan, dim, green, magenta } from 'kleur/colors';
-import npath from 'path';
+import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import type { OutputAsset, OutputChunk } from 'rollup';
-import { fileURLToPath } from 'url';
+import type { BufferEncoding } from 'vfile';
 import type {
 	AstroConfig,
+	AstroSettings,
 	ComponentInstance,
-	EndpointHandler,
+	GetStaticPathsItem,
+	ImageTransform,
+	MiddlewareEndpointHandler,
+	RouteData,
 	RouteType,
+	SSRError,
 	SSRLoadedRenderer,
-} from '../../@types/astro';
-import type { BuildInternals } from '../../core/build/internal.js';
+	SSRManifest,
+} from '../../@types/astro.js';
 import {
+	generateImage as generateImageInternal,
+	getStaticImageList,
+} from '../../assets/build/generate.js';
+import { hasPrerenderedPages, type BuildInternals } from '../../core/build/internal.js';
+import {
+	isRelativePath,
 	joinPaths,
 	prependForwardSlash,
 	removeLeadingForwardSlash,
 	removeTrailingForwardSlash,
 } from '../../core/path.js';
-import type { RenderOptions } from '../../core/render/core';
-import { BEFORE_HYDRATION_SCRIPT_ID, PAGE_SCRIPT_ID } from '../../vite-plugin-scripts/index.js';
-import { call as callEndpoint } from '../endpoint/index.js';
-import { debug, info } from '../logger/core.js';
-import { render } from '../render/core.js';
+import { runHookBuildGenerated } from '../../integrations/index.js';
+import { getOutputDirectory, isServerLikeOutput } from '../../prerender/utils.js';
+import { PAGE_SCRIPT_ID } from '../../vite-plugin-scripts/index.js';
+import { AstroError, AstroErrorData } from '../errors/index.js';
+import { RedirectSinglePageBuiltModule, getRedirectLocationOrThrow } from '../redirects/index.js';
+import { createRenderContext } from '../render/index.js';
 import { callGetStaticPaths } from '../render/route-cache.js';
-import { createLinkStylesheetElementSet, createModuleScriptsSet } from '../render/ssr-element.js';
+import {
+	createAssetLink,
+	createModuleScriptsSet,
+	createStylesheetElementSet,
+} from '../render/ssr-element.js';
 import { createRequest } from '../request.js';
 import { matchRoute } from '../routing/match.js';
 import { getOutputFilename } from '../util.js';
-import { getOutFile, getOutFolder } from './common.js';
-import { eachPageData, getPageDataByComponent, sortedCSS } from './internal.js';
-import type { PageBuildData, SingleFileBuiltModule, StaticBuildOptions } from './types';
+import { BuildPipeline } from './buildPipeline.js';
+import { getOutDirWithinCwd, getOutFile, getOutFolder } from './common.js';
+import {
+	cssOrder,
+	getEntryFilePathFromComponentPath,
+	getPageDataByComponent,
+	mergeInlineCss,
+} from './internal.js';
+import type {
+	PageBuildData,
+	SinglePageBuiltModule,
+	StaticBuildOptions,
+	StylesheetAsset,
+} from './types.js';
 import { getTimeStat } from './util.js';
 
-// Render is usually compute, which Node.js can't parallelize well.
-// In real world testing, dropping from 10->1 showed a notiable perf
-// improvement. In the future, we can revisit a smarter parallel
-// system, possibly one that parallelizes if async IO is detected.
-const MAX_CONCURRENT_RENDERS = 1;
+function createEntryURL(filePath: string, outFolder: URL) {
+	return new URL('./' + filePath + `?time=${Date.now()}`, outFolder);
+}
 
-// Throttle the rendering a paths to prevents creating too many Promises on the microtask queue.
-function* throttle(max: number, inPaths: string[]) {
-	let tmp = [];
-	let i = 0;
-	for (let path of inPaths) {
-		tmp.push(path);
-		if (i === max) {
-			yield tmp;
-			// Empties the array, to avoid allocating a new one.
-			tmp.length = 0;
-			i = 0;
-		} else {
-			i++;
+async function getEntryForRedirectRoute(
+	route: RouteData,
+	internals: BuildInternals,
+	outFolder: URL
+): Promise<SinglePageBuiltModule> {
+	if (route.type !== 'redirect') {
+		throw new Error(`Expected a redirect route.`);
+	}
+	if (route.redirectRoute) {
+		const filePath = getEntryFilePathFromComponentPath(internals, route.redirectRoute.component);
+		if (filePath) {
+			const url = createEntryURL(filePath, outFolder);
+			const ssrEntryPage: SinglePageBuiltModule = await import(url.toString());
+			return ssrEntryPage;
 		}
 	}
 
-	// If tmp has items in it, that means there were less than {max} paths remaining
-	// at the end, so we need to yield these too.
-	if (tmp.length) {
-		yield tmp;
-	}
+	return RedirectSinglePageBuiltModule;
 }
 
-function shouldSkipDraft(pageModule: ComponentInstance, astroConfig: AstroConfig): boolean {
+function shouldSkipDraft(pageModule: ComponentInstance, settings: AstroSettings): boolean {
 	return (
 		// Drafts are disabled
-		!astroConfig.markdown.drafts &&
+		!settings.config.markdown.drafts &&
 		// This is a draft post
 		'frontmatter' in pageModule &&
 		(pageModule as any).frontmatter?.draft === true
@@ -74,23 +96,23 @@ function shouldSkipDraft(pageModule: ComponentInstance, astroConfig: AstroConfig
 
 // Gives back a facadeId that is relative to the root.
 // ie, src/pages/index.astro instead of /Users/name..../src/pages/index.astro
-export function rootRelativeFacadeId(facadeId: string, astroConfig: AstroConfig): string {
-	return facadeId.slice(fileURLToPath(astroConfig.root).length);
+export function rootRelativeFacadeId(facadeId: string, settings: AstroSettings): string {
+	return facadeId.slice(fileURLToPath(settings.config.root).length);
 }
 
 // Determines of a Rollup chunk is an entrypoint page.
 export function chunkIsPage(
-	astroConfig: AstroConfig,
+	settings: AstroSettings,
 	output: OutputAsset | OutputChunk,
 	internals: BuildInternals
 ) {
 	if (output.type !== 'chunk') {
 		return false;
 	}
-	const chunk = output as OutputChunk;
+	const chunk = output;
 	if (chunk.facadeModuleId) {
 		const facadeToEntryId = prependForwardSlash(
-			rootRelativeFacadeId(chunk.facadeModuleId, astroConfig)
+			rootRelativeFacadeId(chunk.facadeModuleId, settings)
 		);
 		return internals.entrySpecifierToBundleMap.has(facadeToEntryId);
 	}
@@ -99,114 +121,253 @@ export function chunkIsPage(
 
 export async function generatePages(opts: StaticBuildOptions, internals: BuildInternals) {
 	const timer = performance.now();
-	info(opts.logging, null, `\n${bgGreen(black(' generating static routes '))}`);
-
-	const ssr = opts.astroConfig.output === 'server';
-	const serverEntry = opts.buildConfig.serverEntry;
-	const outFolder = ssr ? opts.buildConfig.server : opts.astroConfig.outDir;
-	const ssrEntryURL = new URL('./' + serverEntry + `?time=${Date.now()}`, outFolder);
-	const ssrEntry = await import(ssrEntryURL.toString());
-	const builtPaths = new Set<string>();
-
-	for (const pageData of eachPageData(internals)) {
-		await generatePage(opts, internals, pageData, ssrEntry, builtPaths);
+	const ssr = isServerLikeOutput(opts.settings.config);
+	let manifest: SSRManifest;
+	if (ssr) {
+		manifest = await BuildPipeline.retrieveManifest(opts, internals);
+	} else {
+		const baseDirectory = getOutputDirectory(opts.settings.config);
+		const renderersEntryUrl = new URL('renderers.mjs', baseDirectory);
+		const renderers = await import(renderersEntryUrl.toString());
+		manifest = createBuildManifest(
+			opts.settings,
+			internals,
+			renderers.renderers as SSRLoadedRenderer[]
+		);
 	}
-	info(opts.logging, null, dim(`Completed in ${getTimeStat(timer, performance.now())}.\n`));
+	const pipeline = new BuildPipeline(opts, internals, manifest);
+
+	const outFolder = ssr
+		? opts.settings.config.build.server
+		: getOutDirWithinCwd(opts.settings.config.outDir);
+
+	const logger = pipeline.getLogger();
+	// HACK! `astro:assets` relies on a global to know if its running in dev, prod, ssr, ssg, full moon
+	// If we don't delete it here, it's technically not impossible (albeit improbable) for it to leak
+	if (ssr && !hasPrerenderedPages(internals)) {
+		delete globalThis?.astroAsset?.addStaticImage;
+		return;
+	}
+
+	const verb = ssr ? 'prerendering' : 'generating';
+	logger.info(null, `\n${bgGreen(black(` ${verb} static routes `))}`);
+	const builtPaths = new Set<string>();
+	const pagesToGenerate = pipeline.retrieveRoutesToGenerate();
+	if (ssr) {
+		for (const [pageData, filePath] of pagesToGenerate) {
+			if (pageData.route.prerender) {
+				const ssrEntryURLPage = createEntryURL(filePath, outFolder);
+				const ssrEntryPage = await import(ssrEntryURLPage.toString());
+				if (
+					// TODO: remove in Astro 4.0
+					opts.settings.config.build.split ||
+					opts.settings.adapter?.adapterFeatures?.functionPerRoute
+				) {
+					// forcing to use undefined, so we fail in an expected way if the module is not even there.
+					const ssrEntry = ssrEntryPage?.pageModule;
+					if (ssrEntry) {
+						await generatePage(pageData, ssrEntry, builtPaths, pipeline);
+					} else {
+						throw new Error(
+							`Unable to find the manifest for the module ${ssrEntryURLPage.toString()}. This is unexpected and likely a bug in Astro, please report.`
+						);
+					}
+				} else {
+					const ssrEntry = ssrEntryPage as SinglePageBuiltModule;
+					await generatePage(pageData, ssrEntry, builtPaths, pipeline);
+				}
+			}
+			if (pageData.route.type === 'redirect') {
+				const entry = await getEntryForRedirectRoute(pageData.route, internals, outFolder);
+				await generatePage(pageData, entry, builtPaths, pipeline);
+			}
+		}
+	} else {
+		for (const [pageData, filePath] of pagesToGenerate) {
+			if (pageData.route.type === 'redirect') {
+				const entry = await getEntryForRedirectRoute(pageData.route, internals, outFolder);
+				await generatePage(pageData, entry, builtPaths, pipeline);
+			} else {
+				const ssrEntryURLPage = createEntryURL(filePath, outFolder);
+				const entry: SinglePageBuiltModule = await import(ssrEntryURLPage.toString());
+
+				await generatePage(pageData, entry, builtPaths, pipeline);
+			}
+		}
+	}
+
+	const staticImageList = getStaticImageList();
+
+	if (staticImageList.size)
+		logger.info(null, `\n${bgGreen(black(` generating optimized images `))}`);
+	let count = 0;
+	for (const imageData of staticImageList.entries()) {
+		count++;
+		await generateImage(
+			pipeline,
+			imageData[1].options,
+			imageData[1].path,
+			count,
+			staticImageList.size
+		);
+	}
+
+	delete globalThis?.astroAsset?.addStaticImage;
+
+	await runHookBuildGenerated({
+		config: opts.settings.config,
+		logger: pipeline.getLogger(),
+	});
+
+	logger.info(null, dim(`Completed in ${getTimeStat(timer, performance.now())}.\n`));
+}
+
+async function generateImage(
+	pipeline: BuildPipeline,
+	transform: ImageTransform,
+	path: string,
+	count: number,
+	totalCount: number
+) {
+	const logger = pipeline.getLogger();
+	let timeStart = performance.now();
+	const generationData = await generateImageInternal(pipeline, transform, path);
+
+	if (!generationData) {
+		return;
+	}
+
+	const timeEnd = performance.now();
+	const timeChange = getTimeStat(timeStart, timeEnd);
+	const timeIncrease = `(+${timeChange})`;
+	const statsText = generationData.cached
+		? `(reused cache entry)`
+		: `(before: ${generationData.weight.before}kB, after: ${generationData.weight.after}kB)`;
+	const counter = `(${count}/${totalCount})`;
+	logger.info(
+		null,
+		`  ${green('▶')} ${path} ${dim(statsText)} ${dim(timeIncrease)} ${dim(counter)}`
+	);
 }
 
 async function generatePage(
-	opts: StaticBuildOptions,
-	internals: BuildInternals,
 	pageData: PageBuildData,
-	ssrEntry: SingleFileBuiltModule,
-	builtPaths: Set<string>
+	ssrEntry: SinglePageBuiltModule,
+	builtPaths: Set<string>,
+	pipeline: BuildPipeline
 ) {
 	let timeStart = performance.now();
-	const renderers = ssrEntry.renderers;
+	const logger = pipeline.getLogger();
+	const pageInfo = getPageDataByComponent(pipeline.getInternals(), pageData.route.component);
 
-	const pageInfo = getPageDataByComponent(internals, pageData.route.component);
-	const linkIds: string[] = sortedCSS(pageData);
+	// may be used in the future for handling rel=modulepreload, rel=icon, rel=manifest etc.
+	const linkIds: [] = [];
 	const scripts = pageInfo?.hoistedScript ?? null;
+	const styles = pageData.styles
+		.sort(cssOrder)
+		.map(({ sheet }) => sheet)
+		.reduce(mergeInlineCss, []);
 
-	const pageModule = ssrEntry.pageMap.get(pageData.component);
-
-	if (!pageModule) {
+	const pageModulePromise = ssrEntry.page;
+	const onRequest = ssrEntry.onRequest;
+	if (onRequest) {
+		pipeline.setMiddlewareFunction(onRequest as MiddlewareEndpointHandler);
+	}
+	if (!pageModulePromise) {
 		throw new Error(
 			`Unable to find the module for ${pageData.component}. This is unexpected and likely a bug in Astro, please report.`
 		);
 	}
-
-	if (shouldSkipDraft(pageModule, opts.astroConfig)) {
-		info(opts.logging, null, `${magenta('⚠️')}  Skipping draft ${pageData.route.component}`);
+	const pageModule = await pageModulePromise();
+	if (shouldSkipDraft(pageModule, pipeline.getSettings())) {
+		logger.info(null, `${magenta('⚠️')}  Skipping draft ${pageData.route.component}`);
+		// TODO: Remove in Astro 4.0
+		logger.warn(
+			'astro',
+			`The drafts feature is deprecated. You should migrate to content collections instead. See https://docs.astro.build/en/guides/content-collections/#filtering-collection-queries for more information.`
+		);
 		return;
 	}
 
 	const generationOptions: Readonly<GeneratePathOptions> = {
 		pageData,
-		internals,
 		linkIds,
 		scripts,
+		styles,
 		mod: pageModule,
-		renderers,
 	};
 
-	const icon = pageData.route.type === 'page' ? green('▶') : magenta('λ');
-	info(opts.logging, null, `${icon} ${pageData.route.component}`);
+	const icon =
+		pageData.route.type === 'page' || pageData.route.type === 'redirect'
+			? green('▶')
+			: magenta('λ');
+	if (isRelativePath(pageData.route.component)) {
+		logger.info(null, `${icon} ${pageData.route.route}`);
+	} else {
+		logger.info(null, `${icon} ${pageData.route.component}`);
+	}
 
 	// Get paths for the route, calling getStaticPaths if needed.
-	const paths = await getPathsForRoute(pageData, pageModule, opts, builtPaths);
+	const paths = await getPathsForRoute(pageData, pageModule, pipeline, builtPaths);
 
+	let prevTimeEnd = timeStart;
 	for (let i = 0; i < paths.length; i++) {
 		const path = paths[i];
-		await generatePath(path, opts, generationOptions);
+		await generatePath(path, generationOptions, pipeline);
 		const timeEnd = performance.now();
-		const timeChange = getTimeStat(timeStart, timeEnd);
+		const timeChange = getTimeStat(prevTimeEnd, timeEnd);
 		const timeIncrease = `(+${timeChange})`;
-		const filePath = getOutputFilename(opts.astroConfig, path, pageData.route.type);
+		const filePath = getOutputFilename(pipeline.getConfig(), path, pageData.route.type);
 		const lineIcon = i === paths.length - 1 ? '└─' : '├─';
-		info(opts.logging, null, `  ${cyan(lineIcon)} ${dim(filePath)} ${dim(timeIncrease)}`);
+		logger.info(null, `  ${cyan(lineIcon)} ${dim(filePath)} ${dim(timeIncrease)}`);
+		prevTimeEnd = timeEnd;
 	}
 }
 
 async function getPathsForRoute(
 	pageData: PageBuildData,
 	mod: ComponentInstance,
-	opts: StaticBuildOptions,
+	pipeline: BuildPipeline,
 	builtPaths: Set<string>
 ): Promise<Array<string>> {
+	const opts = pipeline.getStaticBuildOptions();
+	const logger = pipeline.getLogger();
 	let paths: Array<string> = [];
 	if (pageData.route.pathname) {
 		paths.push(pageData.route.pathname);
 		builtPaths.add(pageData.route.pathname);
 	} else {
 		const route = pageData.route;
-		const result = await callGetStaticPaths({
+		const staticPaths = await callGetStaticPaths({
 			mod,
-			route: pageData.route,
-			isValidate: false,
-			logging: opts.logging,
-			ssr: opts.astroConfig.output === 'server',
-		})
-			.then((_result) => {
-				const label = _result.staticPaths.length === 1 ? 'page' : 'pages';
-				debug(
-					'build',
-					`├── ${colors.bold(colors.green('✔'))} ${route.component} → ${colors.magenta(
-						`[${_result.staticPaths.length} ${label}]`
-					)}`
-				);
-				return _result;
+			route,
+			routeCache: opts.routeCache,
+			logger,
+			ssr: isServerLikeOutput(opts.settings.config),
+		}).catch((err) => {
+			logger.debug('build', `├── ${colors.bold(colors.red('✗'))} ${route.component}`);
+			throw err;
+		});
+
+		const label = staticPaths.length === 1 ? 'page' : 'pages';
+		logger.debug(
+			'build',
+			`├── ${colors.bold(colors.green('✔'))} ${route.component} → ${colors.magenta(
+				`[${staticPaths.length} ${label}]`
+			)}`
+		);
+
+		paths = staticPaths
+			.map((staticPath) => {
+				try {
+					return route.generate(staticPath.params);
+				} catch (e) {
+					if (e instanceof TypeError) {
+						throw getInvalidRouteSegmentError(e, route, staticPath);
+					}
+					throw e;
+				}
 			})
-			.catch((err) => {
-				debug('build', `├── ${colors.bold(colors.red('✗'))} ${route.component}`);
-				throw err;
-			});
-
-		// Save the route cache so it doesn't get called again
-		opts.routeCache.set(route, result);
-
-		paths = result.staticPaths
-			.map((staticPath) => staticPath.params && route.generate(staticPath.params))
 			.filter((staticPath) => {
 				// The path hasn't been built yet, include it
 				if (!builtPaths.has(removeTrailingForwardSlash(staticPath))) {
@@ -231,13 +392,43 @@ async function getPathsForRoute(
 	return paths;
 }
 
+function getInvalidRouteSegmentError(
+	e: TypeError,
+	route: RouteData,
+	staticPath: GetStaticPathsItem
+): AstroError {
+	const invalidParam = e.message.match(/^Expected "([^"]+)"/)?.[1];
+	const received = invalidParam ? staticPath.params[invalidParam] : undefined;
+	let hint =
+		'Learn about dynamic routes at https://docs.astro.build/en/core-concepts/routing/#dynamic-routes';
+	if (invalidParam && typeof received === 'string') {
+		const matchingSegment = route.segments.find(
+			(segment) => segment[0]?.content === invalidParam
+		)?.[0];
+		const mightBeMissingSpread = matchingSegment?.dynamic && !matchingSegment?.spread;
+		if (mightBeMissingSpread) {
+			hint = `If the param contains slashes, try using a rest parameter: **[...${invalidParam}]**. Learn more at https://docs.astro.build/en/core-concepts/routing/#dynamic-routes`;
+		}
+	}
+	return new AstroError({
+		...AstroErrorData.InvalidDynamicRoute,
+		message: invalidParam
+			? AstroErrorData.InvalidDynamicRoute.message(
+					route.route,
+					JSON.stringify(invalidParam),
+					JSON.stringify(received)
+			  )
+			: `Generated path for ${route.route} is invalid.`,
+		hint,
+	});
+}
+
 interface GeneratePathOptions {
 	pageData: PageBuildData;
-	internals: BuildInternals;
 	linkIds: string[];
 	scripts: { type: 'inline' | 'external'; value: string } | null;
+	styles: StylesheetAsset[];
 	mod: ComponentInstance;
-	renderers: SSRLoadedRenderer[];
 }
 
 function shouldAppendForwardSlash(
@@ -261,8 +452,8 @@ function shouldAppendForwardSlash(
 }
 
 function addPageName(pathname: string, opts: StaticBuildOptions): void {
-	const trailingSlash = opts.astroConfig.trailingSlash;
-	const buildFormat = opts.astroConfig.build.format;
+	const trailingSlash = opts.settings.config.trailingSlash;
+	const buildFormat = opts.settings.config.build.format;
 	const pageName = shouldAppendForwardSlash(trailingSlash, buildFormat)
 		? pathname.replace(/\/?$/, '/').replace(/^\//, '')
 		: pathname.replace(/^\//, '');
@@ -287,46 +478,42 @@ function getUrlForPath(
 		buildPathname = base;
 	} else if (routeType === 'endpoint') {
 		const buildPathRelative = removeLeadingForwardSlash(pathname);
-		buildPathname = base + buildPathRelative;
+		buildPathname = joinPaths(base, buildPathRelative);
 	} else {
 		const buildPathRelative =
 			removeTrailingForwardSlash(removeLeadingForwardSlash(pathname)) + ending;
-		buildPathname = base + buildPathRelative;
+		buildPathname = joinPaths(base, buildPathRelative);
 	}
 	const url = new URL(buildPathname, origin);
 	return url;
 }
 
-async function generatePath(
-	pathname: string,
-	opts: StaticBuildOptions,
-	gopts: GeneratePathOptions
-) {
-	const { astroConfig, logging, origin, routeCache } = opts;
-	const { mod, internals, linkIds, scripts: hoistedScripts, pageData, renderers } = gopts;
+async function generatePath(pathname: string, gopts: GeneratePathOptions, pipeline: BuildPipeline) {
+	const manifest = pipeline.getManifest();
+	const { mod, scripts: hoistedScripts, styles: _styles, pageData } = gopts;
 
 	// This adds the page name to the array so it can be shown as part of stats.
 	if (pageData.route.type === 'page') {
-		addPageName(pathname, opts);
+		addPageName(pathname, pipeline.getStaticBuildOptions());
 	}
 
-	debug('build', `Generating: ${pathname}`);
+	pipeline.getEnvironment().logger.debug('build', `Generating: ${pathname}`);
 
-	// If a base path was provided, append it to the site URL. This ensures that
-	// all injected scripts and links are referenced relative to the site and subpath.
-	const site =
-		astroConfig.base !== '/'
-			? joinPaths(astroConfig.site?.toString() || 'http://localhost/', astroConfig.base)
-			: astroConfig.site;
-	const links = createLinkStylesheetElementSet(linkIds, site);
-	const scripts = createModuleScriptsSet(hoistedScripts ? [hoistedScripts] : [], site);
+	// may be used in the future for handling rel=modulepreload, rel=icon, rel=manifest etc.
+	const links = new Set<never>();
+	const scripts = createModuleScriptsSet(
+		hoistedScripts ? [hoistedScripts] : [],
+		manifest.base,
+		manifest.assetsPrefix
+	);
+	const styles = createStylesheetElementSet(_styles, manifest.base, manifest.assetsPrefix);
 
-	if (astroConfig._ctx.scripts.some((script) => script.stage === 'page')) {
-		const hashedFilePath = internals.entrySpecifierToBundleMap.get(PAGE_SCRIPT_ID);
+	if (pipeline.getSettings().scripts.some((script) => script.stage === 'page')) {
+		const hashedFilePath = pipeline.getInternals().entrySpecifierToBundleMap.get(PAGE_SCRIPT_ID);
 		if (typeof hashedFilePath !== 'string') {
 			throw new Error(`Cannot find the built path for ${PAGE_SCRIPT_ID}`);
 		}
-		const src = prependForwardSlash(npath.posix.join(astroConfig.base, hashedFilePath));
+		const src = createAssetLink(hashedFilePath, manifest.base, manifest.assetsPrefix);
 		scripts.add({
 			props: { type: 'module', src },
 			children: '',
@@ -334,7 +521,7 @@ async function generatePath(
 	}
 
 	// Add all injected scripts to the page.
-	for (const script of astroConfig._ctx.scripts) {
+	for (const script of pipeline.getSettings().scripts) {
 		if (script.stage === 'head-inline') {
 			scripts.add({
 				props: {},
@@ -343,75 +530,112 @@ async function generatePath(
 		}
 	}
 
-	const ssr = opts.astroConfig.output === 'server';
+	const ssr = isServerLikeOutput(pipeline.getConfig());
 	const url = getUrlForPath(
 		pathname,
-		opts.astroConfig.base,
-		origin,
-		opts.astroConfig.build.format,
+		pipeline.getConfig().base,
+		pipeline.getStaticBuildOptions().origin,
+		pipeline.getConfig().build.format,
 		pageData.route.type
 	);
-	const options: RenderOptions = {
-		adapterName: undefined,
-		links,
-		logging,
-		markdown: {
-			...astroConfig.markdown,
-			isAstroFlavoredMd: astroConfig.legacy.astroFlavoredMarkdown,
-		},
-		mod,
-		mode: opts.mode,
-		origin,
+
+	const renderContext = await createRenderContext({
 		pathname,
+		request: createRequest({
+			url,
+			headers: new Headers(),
+			logger: pipeline.getLogger(),
+			ssr,
+		}),
+		componentMetadata: manifest.componentMetadata,
 		scripts,
-		renderers,
-		async resolve(specifier: string) {
-			const hashedFilePath = internals.entrySpecifierToBundleMap.get(specifier);
-			if (typeof hashedFilePath !== 'string') {
-				// If no "astro:scripts/before-hydration.js" script exists in the build,
-				// then we can assume that no before-hydration scripts are needed.
-				// Return this as placeholder, which will be ignored by the browser.
-				// TODO: In the future, we hope to run this entire script through Vite,
-				// removing the need to maintain our own custom Vite-mimic resolve logic.
-				if (specifier === BEFORE_HYDRATION_SCRIPT_ID) {
-					return 'data:text/javascript;charset=utf-8,//[no before-hydration script]';
-				}
-				throw new Error(`Cannot find the built path for ${specifier}`);
-			}
-			return prependForwardSlash(npath.posix.join(astroConfig.base, hashedFilePath));
-		},
-		request: createRequest({ url, headers: new Headers(), logging, ssr }),
+		styles,
+		links,
 		route: pageData.route,
-		routeCache,
-		site: astroConfig.site
-			? new URL(astroConfig.base, astroConfig.site).toString()
-			: astroConfig.site,
-		ssr,
-		streaming: true,
-	};
+		env: pipeline.getEnvironment(),
+		mod,
+	});
 
-	let body: string;
-	if (pageData.route.type === 'endpoint') {
-		const result = await callEndpoint(mod as unknown as EndpointHandler, options);
+	let body: string | Uint8Array;
+	let encoding: BufferEncoding | undefined;
 
-		if (result.type === 'response') {
-			throw new Error(`Returning a Response from an endpoint is not supported in SSG mode.`);
+	let response: Response;
+	try {
+		response = await pipeline.renderRoute(renderContext, mod);
+	} catch (err) {
+		if (!AstroError.is(err) && !(err as SSRError).id && typeof err === 'object') {
+			(err as SSRError).id = pageData.component;
 		}
-		body = result.body;
-	} else {
-		const response = await render(options);
-
-		// If there's a redirect or something, just do nothing.
-		if (response.status !== 200 || !response.body) {
-			return;
-		}
-
-		body = await response.text();
+		throw err;
 	}
 
-	const outFolder = getOutFolder(astroConfig, pathname, pageData.route.type);
-	const outFile = getOutFile(astroConfig, outFolder, pathname, pageData.route.type);
+	if (response.status >= 300 && response.status < 400) {
+		// If redirects is set to false, don't output the HTML
+		if (!pipeline.getConfig().build.redirects) {
+			return;
+		}
+		const locationSite = getRedirectLocationOrThrow(response.headers);
+		const siteURL = pipeline.getConfig().site;
+		const location = siteURL ? new URL(locationSite, siteURL) : locationSite;
+		const fromPath = new URL(renderContext.request.url).pathname;
+		// A short delay causes Google to interpret the redirect as temporary.
+		// https://developers.google.com/search/docs/crawling-indexing/301-redirects#metarefresh
+		const delay = response.status === 302 ? 2 : 0;
+		body = `<!doctype html>
+<title>Redirecting to: ${location}</title>
+<meta http-equiv="refresh" content="${delay};url=${location}">
+<meta name="robots" content="noindex">
+<link rel="canonical" href="${location}">
+<body>
+	<a href="${location}">Redirecting from <code>${fromPath}</code> to <code>${location}</code></a>
+</body>`;
+		if (pipeline.getConfig().compressHTML === true) {
+			body = body.replaceAll('\n', '');
+		}
+		// A dynamic redirect, set the location so that integrations know about it.
+		if (pageData.route.type !== 'redirect') {
+			pageData.route.redirect = location.toString();
+		}
+	} else {
+		// If there's no body, do nothing
+		if (!response.body) return;
+		body = Buffer.from(await response.arrayBuffer());
+		encoding = (response.headers.get('X-Astro-Encoding') as BufferEncoding | null) ?? 'utf-8';
+	}
+
+	const outFolder = getOutFolder(pipeline.getConfig(), pathname, pageData.route.type);
+	const outFile = getOutFile(pipeline.getConfig(), outFolder, pathname, pageData.route.type);
 	pageData.route.distURL = outFile;
+
 	await fs.promises.mkdir(outFolder, { recursive: true });
-	await fs.promises.writeFile(outFile, body, 'utf-8');
+	await fs.promises.writeFile(outFile, body, encoding);
+}
+
+/**
+ * It creates a `SSRManifest` from the `AstroSettings`.
+ *
+ * Renderers needs to be pulled out from the page module emitted during the build.
+ * @param settings
+ * @param renderers
+ */
+export function createBuildManifest(
+	settings: AstroSettings,
+	internals: BuildInternals,
+	renderers: SSRLoadedRenderer[]
+): SSRManifest {
+	return {
+		assets: new Set(),
+		entryModules: Object.fromEntries(internals.entrySpecifierToBundleMap.entries()),
+		routes: [],
+		adapterName: '',
+		clientDirectives: settings.clientDirectives,
+		compressHTML: settings.config.compressHTML,
+		renderers,
+		base: settings.config.base,
+		assetsPrefix: settings.config.build.assetsPrefix,
+		site: settings.config.site
+			? new URL(settings.config.base, settings.config.site).toString()
+			: settings.config.site,
+		componentMetadata: internals.componentMetadata,
+	};
 }

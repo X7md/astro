@@ -1,171 +1,133 @@
-import type { TransformResult } from '@astrojs/compiler';
-import type { PluginContext, SourceMapInput } from 'rollup';
-import type { ViteDevServer } from 'vite';
-import type { AstroConfig } from '../@types/astro';
-import type { TransformStyleWithVite } from './styles';
+import { transformWithEsbuild, type ESBuildTransformResult } from 'vite';
+import type { AstroConfig } from '../@types/astro.js';
+import { cachedCompilation, type CompileProps, type CompileResult } from '../core/compile/index.js';
+import type { Logger } from '../core/logger/core.js';
+import { getFileInfo } from '../vite-plugin-utils/index.js';
 
-import { transform } from '@astrojs/compiler';
-import { fileURLToPath } from 'url';
-import { AstroErrorCodes } from '../core/errors.js';
-import { prependForwardSlash } from '../core/path.js';
-import { viteID } from '../core/util.js';
+interface CachedFullCompilation {
+	compileProps: CompileProps;
+	logger: Logger;
+}
 
-type CompilationCache = Map<string, CompileResult>;
-type CompileResult = TransformResult & {
-	cssDeps: Set<string>;
+interface FullCompileResult extends Omit<CompileResult, 'map'> {
+	map: ESBuildTransformResult['map'];
+}
+
+interface EnhanceCompilerErrorOptions {
+	err: Error;
+	id: string;
 	source: string;
-};
-
-const configCache = new WeakMap<AstroConfig, CompilationCache>();
-
-export interface CompileProps {
 	config: AstroConfig;
-	filename: string;
-	moduleId: string;
-	source: string;
-	ssr: boolean;
-	transformStyleWithVite: TransformStyleWithVite;
-	viteDevServer?: ViteDevServer;
-	pluginContext: PluginContext;
+	logger: Logger;
 }
 
-function getNormalizedID(filename: string): string {
+const FRONTMATTER_PARSE_REGEXP = /^\-\-\-(.*)^\-\-\-/ms;
+
+export async function cachedFullCompilation({
+	compileProps,
+	logger,
+}: CachedFullCompilation): Promise<FullCompileResult> {
+	let transformResult: CompileResult;
+	let esbuildResult: ESBuildTransformResult;
+
 	try {
-		const filenameURL = new URL(`file://${filename}`);
-		return fileURLToPath(filenameURL);
-	} catch (err) {
-		// Not a real file, so just use the provided filename as the normalized id
-		return filename;
-	}
-}
-
-async function compile({
-	config,
-	filename,
-	moduleId,
-	source,
-	ssr,
-	transformStyleWithVite,
-	viteDevServer,
-	pluginContext,
-}: CompileProps): Promise<CompileResult> {
-	const normalizedID = getNormalizedID(filename);
-	let cssDeps = new Set<string>();
-	let cssTransformError: Error | undefined;
-
-	// handleHotUpdate doesn't have `addWatchFile` used by transformStyleWithVite.
-	if (!pluginContext.addWatchFile) {
-		pluginContext.addWatchFile = () => {};
-	}
-
-	// Transform from `.astro` to valid `.ts`
-	// use `sourcemap: "both"` so that sourcemap is included in the code
-	// result passed to esbuild, but also available in the catch handler.
-	const transformResult = await transform(source, {
-		// For Windows compat, prepend the module ID with `/@fs`
-		pathname: `/@fs${prependForwardSlash(moduleId)}`,
-		projectRoot: config.root.toString(),
-		site: config.site?.toString(),
-		sourcefile: filename,
-		sourcemap: 'both',
-		internalURL: `/@fs${prependForwardSlash(
-			viteID(new URL('../runtime/server/index.js', import.meta.url))
-		)}`,
-		// TODO: baseline flag
-		experimentalStaticExtraction: true,
-		preprocessStyle: async (value: string, attrs: Record<string, string>) => {
-			const lang = `.${attrs?.lang || 'css'}`.toLowerCase();
-
-			try {
-				const result = await transformStyleWithVite.call(pluginContext, {
-					id: normalizedID,
-					source: value,
-					lang,
-					ssr,
-					viteDevServer,
-				});
-
-				if (!result) return null as any; // TODO: add type in compiler to fix "any"
-
-				for (const dep of result.deps) {
-					cssDeps.add(dep);
-				}
-
-				let map: SourceMapInput | undefined;
-				if (result.map) {
-					if (typeof result.map === 'string') {
-						map = result.map;
-					} else if (result.map.mappings) {
-						map = result.map.toString();
-					}
-				}
-
-				return { code: result.code, map };
-			} catch (err) {
-				// save error to throw in plugin context
-				cssTransformError = err as any;
-				return null;
-			}
-		},
-	})
-		.catch((err) => {
-			// throw compiler errors here if encountered
-			err.code = err.code || AstroErrorCodes.UnknownCompilerError;
-			throw err;
-		})
-		.then((result) => {
-			// throw CSS transform errors here if encountered
-			if (cssTransformError) {
-				(cssTransformError as any).code =
-					(cssTransformError as any).code || AstroErrorCodes.UnknownCompilerCSSError;
-				throw cssTransformError;
-			}
-			return result;
+		transformResult = await cachedCompilation(compileProps);
+		// Compile all TypeScript to JavaScript.
+		// Also, catches invalid JS/TS in the compiled output before returning.
+		esbuildResult = await transformWithEsbuild(transformResult.code, compileProps.filename, {
+			loader: 'ts',
+			target: 'esnext',
+			sourcemap: 'external',
+			tsconfigRaw: {
+				compilerOptions: {
+					// Ensure client:only imports are treeshaken
+					verbatimModuleSyntax: false,
+					importsNotUsedAsValues: 'remove',
+				},
+			},
 		});
-
-	const compileResult: CompileResult = Object.create(transformResult, {
-		cssDeps: {
-			value: cssDeps,
-		},
-		source: {
-			value: source,
-		},
-	});
-
-	return compileResult;
-}
-
-export function isCached(config: AstroConfig, filename: string) {
-	return configCache.has(config) && configCache.get(config)!.has(filename);
-}
-
-export function getCachedSource(config: AstroConfig, filename: string): string | null {
-	if (!isCached(config, filename)) return null;
-	let src = configCache.get(config)!.get(filename);
-	if (!src) return null;
-	return src.source;
-}
-
-export function invalidateCompilation(config: AstroConfig, filename: string) {
-	if (configCache.has(config)) {
-		const cache = configCache.get(config)!;
-		cache.delete(filename);
+	} catch (err: any) {
+		await enhanceCompileError({
+			err,
+			id: compileProps.filename,
+			source: compileProps.source,
+			config: compileProps.astroConfig,
+			logger: logger,
+		});
+		throw err;
 	}
+
+	const { fileId: file, fileUrl: url } = getFileInfo(
+		compileProps.filename,
+		compileProps.astroConfig
+	);
+
+	let SUFFIX = '';
+	SUFFIX += `\nconst $$file = ${JSON.stringify(file)};\nconst $$url = ${JSON.stringify(
+		url
+	)};export { $$file as file, $$url as url };\n`;
+
+	// Add HMR handling in dev mode.
+	if (!compileProps.viteConfig.isProduction) {
+		let i = 0;
+		while (i < transformResult.scripts.length) {
+			SUFFIX += `import "${compileProps.filename}?astro&type=script&index=${i}&lang.ts";`;
+			i++;
+		}
+	}
+
+	// Prefer live reload to HMR in `.astro` files
+	if (!compileProps.viteConfig.isProduction) {
+		SUFFIX += `\nif (import.meta.hot) { import.meta.hot.decline() }`;
+	}
+
+	return {
+		...transformResult,
+		code: esbuildResult.code + SUFFIX,
+		map: esbuildResult.map,
+	};
 }
 
-export async function cachedCompilation(props: CompileProps): Promise<CompileResult> {
-	const { config, filename } = props;
-	let cache: CompilationCache;
-	if (!configCache.has(config)) {
-		cache = new Map();
-		configCache.set(config, cache);
-	} else {
-		cache = configCache.get(config)!;
+async function enhanceCompileError({
+	err,
+	id,
+	source,
+}: EnhanceCompilerErrorOptions): Promise<void> {
+	const lineText = (err as any).loc?.lineText;
+	// Verify frontmatter: a common reason that this plugin fails is that
+	// the user provided invalid JS/TS in the component frontmatter.
+	// If the frontmatter is invalid, the `err` object may be a compiler
+	// panic or some other vague/confusing compiled error message.
+	//
+	// Before throwing, it is better to verify the frontmatter here, and
+	// let esbuild throw a more specific exception if the code is invalid.
+	// If frontmatter is valid or cannot be parsed, then continue.
+	const scannedFrontmatter = FRONTMATTER_PARSE_REGEXP.exec(source);
+	if (scannedFrontmatter) {
+		// Top-level return is not supported, so replace `return` with throw
+		const frontmatter = scannedFrontmatter[1].replace(/\breturn\b/g, 'throw');
+
+		// If frontmatter does not actually include the offending line, skip
+		if (lineText && !frontmatter.includes(lineText)) throw err;
+
+		try {
+			await transformWithEsbuild(frontmatter, id, {
+				loader: 'ts',
+				target: 'esnext',
+				sourcemap: false,
+			});
+		} catch (frontmatterErr: any) {
+			// Improve the error by replacing the phrase "unexpected end of file"
+			// with "unexpected end of frontmatter" in the esbuild error message.
+			if (frontmatterErr?.message) {
+				frontmatterErr.message = frontmatterErr.message.replace(
+					'end of file',
+					'end of frontmatter'
+				);
+			}
+			throw frontmatterErr;
+		}
 	}
-	if (cache.has(filename)) {
-		return cache.get(filename)!;
-	}
-	const compileResult = await compile(props);
-	cache.set(filename, compileResult);
-	return compileResult;
+
+	throw err;
 }

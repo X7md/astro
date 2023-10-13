@@ -6,7 +6,11 @@ describe('Directives', async () => {
 	let fixture;
 
 	before(async () => {
-		fixture = await loadFixture({ root: './fixtures/astro-directives/' });
+		fixture = await loadFixture({
+			root: './fixtures/astro-directives/',
+			// test suite was authored when inlineStylesheets defaulted to never
+			build: { inlineStylesheets: 'never' },
+		});
 		await fixture.build();
 	});
 
@@ -14,19 +18,25 @@ describe('Directives', async () => {
 		const html = await fixture.readFile('/define-vars/index.html');
 		const $ = cheerio.load(html);
 
-		expect($('script')).to.have.lengthOf(3);
+		expect($('script')).to.have.lengthOf(5);
 
 		let i = 0;
 		for (const script of $('script').toArray()) {
 			// Wrap script in scope ({}) to avoid redeclaration errors
-			expect($(script).text().at(0)).to.equal('{');
-			expect($(script).text().at(-1)).to.equal('}');
+			expect($(script).text().startsWith('(function(){')).to.equal(true);
+			expect($(script).text().endsWith('})();')).to.equal(true);
 			if (i < 2) {
 				// Inline defined variables
-				expect($(script).toString()).to.include('let foo = "bar"');
-			} else {
+				expect($(script).toString()).to.include('const foo = "bar"');
+			} else if (i < 3) {
 				// Convert invalid keys to valid identifiers
-				expect($(script).toString()).to.include('let dashCase = "bar"');
+				expect($(script).toString()).to.include('const dashCase = "bar"');
+			} else if (i < 4) {
+				// Closing script tags in strings are escaped
+				expect($(script).toString()).to.include('const bar = "<script>bar\\x3C/script>"');
+			} else {
+				// Vars with undefined values are handled
+				expect($(script).toString()).to.include('const undef = undefined');
 			}
 			i++;
 		}
@@ -36,7 +46,8 @@ describe('Directives', async () => {
 		const html = await fixture.readFile('/define-vars/index.html');
 		const $ = cheerio.load(html);
 
-		expect($('style')).to.have.lengthOf(2);
+		// All styles should be bundled
+		expect($('style')).to.have.lengthOf(0);
 
 		// Inject style attribute on top-level element in page
 		expect($('html').attr('style').toString()).to.include('--bg: white;');
@@ -44,6 +55,19 @@ describe('Directives', async () => {
 
 		// Inject style attribute on top-level elements in component
 		expect($('h1').attr('style').toString()).to.include('--textColor: red;');
+	});
+
+	it('Properly handles define:vars on style elements with style object', async () => {
+		const html = await fixture.readFile('/define-vars/index.html');
+		const $ = cheerio.load(html);
+
+		// All styles should be bundled
+		expect($('style')).to.have.lengthOf(0);
+
+		// Inject style attribute on top-level element in page
+		expect($('#compound-style').attr('style').toString()).to.include(
+			'color:var(--fg);--fg: black;--bg: white;'
+		);
 	});
 
 	it('set:html', async () => {

@@ -1,5 +1,3 @@
-import mdx from '@astrojs/mdx';
-
 import { expect } from 'chai';
 import { parseHTML } from 'linkedom';
 import { loadFixture } from '../../../astro/test/test-utils.js';
@@ -10,6 +8,8 @@ describe('MDX Page', () => {
 	before(async () => {
 		fixture = await loadFixture({
 			root: new URL('./fixtures/mdx-page/', import.meta.url),
+			// test suite was authored when inlineStylesheets defaulted to never
+			build: { inlineStylesheets: 'never' },
 		});
 	});
 

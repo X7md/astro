@@ -1,21 +1,37 @@
-import type { AstroComponentMetadata, SSRLoadedRenderer, SSRResult } from '../../../@types/astro';
-import type { RenderInstruction } from './types.js';
+import type {
+	AstroComponentMetadata,
+	RouteData,
+	SSRLoadedRenderer,
+	SSRResult,
+} from '../../../@types/astro.js';
+import { createRenderInstruction, type RenderInstruction } from './instruction.js';
 
-import { markHTMLString } from '../escape.js';
+import { clsx } from 'clsx';
+import { AstroError, AstroErrorData } from '../../../core/errors/index.js';
+import { HTMLBytes, markHTMLString } from '../escape.js';
 import { extractDirectives, generateHydrateScript } from '../hydration.js';
 import { serializeProps } from '../serialize.js';
 import { shorthash } from '../shorthash.js';
-import { renderSlot } from './any.js';
+import { isPromise } from '../util.js';
 import {
+	createAstroComponentInstance,
 	isAstroComponentFactory,
-	renderAstroComponent,
 	renderTemplate,
-	renderToIterable,
-} from './astro.js';
-import { Fragment, Renderer } from './common.js';
+	type AstroComponentFactory,
+} from './astro/index.js';
+import {
+	Fragment,
+	Renderer,
+	chunkToString,
+	type RenderDestination,
+	type RenderInstance,
+} from './common.js';
 import { componentIsHTMLElement, renderHTMLElement } from './dom.js';
+import { maybeRenderHead } from './head.js';
+import { renderSlotToString, renderSlots, type ComponentSlots } from './slot.js';
 import { formatList, internalSpreadAttributes, renderElement, voidElementNames } from './util.js';
 
+const needsHeadRenderingSymbol = Symbol.for('astro.needsHeadRendering');
 const rendererAliases = new Map([['solid', 'solid-js']]);
 
 function guessRenderers(componentUrl?: string): string[] {
@@ -27,85 +43,59 @@ function guessRenderers(componentUrl?: string): string[] {
 			return ['@astrojs/vue'];
 		case 'jsx':
 		case 'tsx':
-			return ['@astrojs/react', '@astrojs/preact'];
+			return ['@astrojs/react', '@astrojs/preact', '@astrojs/solid-js', '@astrojs/vue (jsx)'];
 		default:
-			return ['@astrojs/react', '@astrojs/preact', '@astrojs/vue', '@astrojs/svelte'];
+			return [
+				'@astrojs/react',
+				'@astrojs/preact',
+				'@astrojs/solid-js',
+				'@astrojs/vue',
+				'@astrojs/svelte',
+				'@astrojs/lit',
+			];
 	}
 }
 
-type ComponentType = 'fragment' | 'html' | 'astro-factory' | 'unknown';
+export type ComponentIterable = AsyncIterable<string | HTMLBytes | RenderInstruction>;
 
-function getComponentType(Component: unknown): ComponentType {
-	if (Component === Fragment) {
-		return 'fragment';
-	}
-	if (Component && typeof Component === 'object' && (Component as any)['astro:html']) {
-		return 'html';
-	}
-	if (isAstroComponentFactory(Component)) {
-		return 'astro-factory';
-	}
-	return 'unknown';
+function isFragmentComponent(Component: unknown) {
+	return Component === Fragment;
 }
 
-export async function renderComponent(
+function isHTMLComponent(Component: unknown) {
+	return Component && (Component as any)['astro:html'] === true;
+}
+
+const ASTRO_SLOT_EXP = /\<\/?astro-slot\b[^>]*>/g;
+const ASTRO_STATIC_SLOT_EXP = /\<\/?astro-static-slot\b[^>]*>/g;
+function removeStaticAstroSlot(html: string, supportsAstroStaticSlot: boolean) {
+	const exp = supportsAstroStaticSlot ? ASTRO_STATIC_SLOT_EXP : ASTRO_SLOT_EXP;
+	return html.replace(exp, '');
+}
+
+async function renderFrameworkComponent(
 	result: SSRResult,
 	displayName: string,
 	Component: unknown,
 	_props: Record<string | number, any>,
 	slots: any = {}
-): Promise<string | AsyncIterable<string | RenderInstruction>> {
-	Component = await Component;
-
-	switch (getComponentType(Component)) {
-		case 'fragment': {
-			const children = await renderSlot(result, slots?.default);
-			if (children == null) {
-				return children;
-			}
-			return markHTMLString(children);
-		}
-
-		// .html components
-		case 'html': {
-			const children: Record<string, string> = {};
-			if (slots) {
-				await Promise.all(
-					Object.entries(slots).map(([key, value]) =>
-						renderSlot(result, value as string).then((output) => {
-							children[key] = output;
-						})
-					)
-				);
-			}
-			const html = (Component as any).render({ slots: children });
-			return markHTMLString(html);
-		}
-
-		case 'astro-factory': {
-			async function* renderAstroComponentInline(): AsyncGenerator<
-				string | RenderInstruction,
-				void,
-				undefined
-			> {
-				let iterable = await renderToIterable(result, Component as any, displayName, _props, slots);
-				yield* iterable;
-			}
-
-			return renderAstroComponentInline();
-		}
-	}
-
+): Promise<RenderInstance> {
 	if (!Component && !_props['client:only']) {
 		throw new Error(
 			`Unable to render ${displayName} because it is ${Component}!\nDid you forget to import the component or is it possible there is a typo?`
 		);
 	}
 
-	const { renderers } = result._metadata;
-	const metadata: AstroComponentMetadata = { displayName };
+	const { renderers, clientDirectives } = result;
+	const metadata: AstroComponentMetadata = {
+		astroStaticSlot: true,
+		displayName,
+	};
 
-	const { hydration, isPage, props } = extractDirectives(_props);
+	const { hydration, isPage, props, propsWithoutTransitionAttributes } = extractDirectives(
+		_props,
+		clientDirectives
+	);
 	let html = '';
 	let attrs: Record<string, string> | undefined = undefined;
 
@@ -115,31 +105,10 @@ export async function renderComponent(
 		metadata.componentExport = hydration.componentExport;
 		metadata.componentUrl = hydration.componentUrl;
 	}
+
 	const probableRendererNames = guessRenderers(metadata.componentUrl);
-
-	if (
-		Array.isArray(renderers) &&
-		renderers.length === 0 &&
-		typeof Component !== 'string' &&
-		!componentIsHTMLElement(Component)
-	) {
-		const message = `Unable to render ${metadata.displayName}!
-
-There are no \`integrations\` set in your \`astro.config.mjs\` file.
-Did you mean to add ${formatList(probableRendererNames.map((r) => '`' + r + '`'))}?`;
-		throw new Error(message);
-	}
-
-	const children: Record<string, string> = {};
-	if (slots) {
-		await Promise.all(
-			Object.entries(slots).map(([key, value]) =>
-				renderSlot(result, value as string).then((output) => {
-					children[key] = output;
-				})
-			)
-		);
-	}
+	const validRenderers = renderers.filter((r) => r.name !== 'astro:jsx');
+	const { children, slotInstructions } = await renderSlots(result, slots);
 
 	// Call the renderers `check` hook to see if any claim this component.
 	let renderer: SSRLoadedRenderer | undefined;
@@ -147,7 +116,14 @@ Did you mean to add ${formatList(probableRendererNames.map((r) => '`' + r + '`')
 		// If this component ran through `__astro_tag_component__`, we already know
 		// which renderer to match to and can skip the usual `check` calls.
 		// This will help us throw most relevant error message for modules with runtime errors
-		if (Component && (Component as any)[Renderer]) {
+		let isTagged = false;
+		try {
+			isTagged = Component && (Component as any)[Renderer];
+		} catch {
+			// Accessing `Component[Renderer]` may throw if `Component` is a Proxy that doesn't
+			// return the actual read-only value. In this case, ignore.
+		}
+		if (isTagged) {
 			const rendererName = (Component as any)[Renderer];
 			renderer = renderers.find(({ name }) => name === rendererName);
 		}
@@ -173,9 +149,17 @@ Did you mean to add ${formatList(probableRendererNames.map((r) => '`' + r + '`')
 		}
 
 		if (!renderer && typeof HTMLElement === 'function' && componentIsHTMLElement(Component)) {
-			const output = renderHTMLElement(result, Component as typeof HTMLElement, _props, slots);
-
-			return output;
+			const output = await renderHTMLElement(
+				result,
+				Component as typeof HTMLElement,
+				_props,
+				slots
+			);
+			return {
+				render(destination) {
+					destination.write(output);
+				},
+			};
 		}
 	} else {
 		// Attempt: use explicitly passed renderer name
@@ -189,8 +173,8 @@ Did you mean to add ${formatList(probableRendererNames.map((r) => '`' + r + '`')
 			);
 		}
 		// Attempt: user only has a single renderer, default to that
-		if (!renderer && renderers.length === 1) {
-			renderer = renderers[0];
+		if (!renderer && validRenderers.length === 1) {
+			renderer = validRenderers[0];
 		}
 		// Attempt: can we guess the renderer from the export extension?
 		if (!renderer) {
@@ -204,26 +188,31 @@ Did you mean to add ${formatList(probableRendererNames.map((r) => '`' + r + '`')
 	// If no one claimed the renderer
 	if (!renderer) {
 		if (metadata.hydrate === 'only') {
-			// TODO: improve error message
-			throw new Error(`Unable to render ${metadata.displayName}!
-
-Using the \`client:only\` hydration strategy, Astro needs a hint to use the correct renderer.
-Did you mean to pass <${metadata.displayName} client:only="${probableRendererNames
-				.map((r) => r.replace('@astrojs/', ''))
-				.join('|')}" />
-`);
+			throw new AstroError({
+				...AstroErrorData.NoClientOnlyHint,
+				message: AstroErrorData.NoClientOnlyHint.message(metadata.displayName),
+				hint: AstroErrorData.NoClientOnlyHint.hint(
+					probableRendererNames.map((r) => r.replace('@astrojs/', '')).join('|')
+				),
+			});
 		} else if (typeof Component !== 'string') {
-			const matchingRenderers = renderers.filter((r) => probableRendererNames.includes(r.name));
-			const plural = renderers.length > 1;
+			const matchingRenderers = validRenderers.filter((r) =>
+				probableRendererNames.includes(r.name)
+			);
+			const plural = validRenderers.length > 1;
 			if (matchingRenderers.length === 0) {
-				throw new Error(`Unable to render ${metadata.displayName}!
-
-There ${plural ? 'are' : 'is'} ${renderers.length} renderer${
-					plural ? 's' : ''
-				} configured in your \`astro.config.mjs\` file,
-but ${plural ? 'none were' : 'it was not'} able to server-side render ${metadata.displayName}.
-
-Did you mean to enable ${formatList(probableRendererNames.map((r) => '`' + r + '`'))}?`);
+				throw new AstroError({
+					...AstroErrorData.NoMatchingRenderer,
+					message: AstroErrorData.NoMatchingRenderer.message(
+						metadata.displayName,
+						metadata?.componentUrl?.split('.').pop(),
+						plural,
+						validRenderers.length
+					),
+					hint: AstroErrorData.NoMatchingRenderer.hint(
+						formatList(probableRendererNames.map((r) => '`' + r + '`'))
+					),
+				});
 			} else if (matchingRenderers.length === 1) {
 				// We already know that renderer.ssr.check() has failed
 				// but this will throw a much more descriptive error!
@@ -231,7 +220,7 @@ Did you mean to enable ${formatList(probableRendererNames.map((r) => '`' + r + '
 				({ html, attrs } = await renderer.ssr.renderToStaticMarkup.call(
 					{ result },
 					Component,
-					props,
+					propsWithoutTransitionAttributes,
 					children,
 					metadata
 				));
@@ -251,12 +240,12 @@ If you're still stuck, please open an issue on GitHub or join us at https://astr
 		}
 	} else {
 		if (metadata.hydrate === 'only') {
-			html = await renderSlot(result, slots?.fallback);
+			html = await renderSlotToString(result, slots?.fallback);
 		} else {
 			({ html, attrs } = await renderer.ssr.renderToStaticMarkup.call(
 				{ result },
 				Component,
-				props,
+				propsWithoutTransitionAttributes,
 				children,
 				metadata
 			));
@@ -271,39 +260,66 @@ If you're still stuck, please open an issue on GitHub or join us at https://astr
 		renderer.name !== '@astrojs/lit' &&
 		metadata.hydrate
 	) {
-		throw new Error(
-			`${metadata.displayName} component has a \`client:${metadata.hydrate}\` directive, but no client entrypoint was provided by ${renderer.name}!`
-		);
+		throw new AstroError({
+			...AstroErrorData.NoClientEntrypoint,
+			message: AstroErrorData.NoClientEntrypoint.message(
+				displayName,
+				metadata.hydrate,
+				renderer.name
+			),
+		});
 	}
 
 	// This is a custom element without a renderer. Because of that, render it
 	// as a string and the user is responsible for adding a script tag for the component definition.
 	if (!html && typeof Component === 'string') {
+		// Sanitize tag name because some people might try to inject attributes 🙄
+		const Tag = sanitizeElementName(Component);
 		const childSlots = Object.values(children).join('');
-		const iterable = renderAstroComponent(
-			await renderTemplate`<${Component}${internalSpreadAttributes(props)}${markHTMLString(
-				childSlots === '' && voidElementNames.test(Component)
-					? `/>`
-					: `>${childSlots}</${Component}>`
-			)}`
-		);
+
+		const renderTemplateResult = renderTemplate`<${Tag}${internalSpreadAttributes(
+			props
+		)}${markHTMLString(
+			childSlots === '' && voidElementNames.test(Tag) ? `/>` : `>${childSlots}</${Tag}>`
+		)}`;
+
 		html = '';
-		for await (const chunk of iterable) {
-			html += chunk;
-		}
+		const destination: RenderDestination = {
+			write(chunk) {
+				if (chunk instanceof Response) return;
+				html += chunkToString(result, chunk);
+			},
+		};
+		await renderTemplateResult.render(destination);
 	}
 
 	if (!hydration) {
-		if (isPage || renderer?.name === 'astro:jsx') {
-			return html;
-		}
-		return markHTMLString(html.replace(/\<\/?astro-slot\>/g, ''));
+		return {
+			render(destination) {
+				// If no hydration is needed, start rendering the html and return
+				if (slotInstructions) {
+					for (const instruction of slotInstructions) {
+						destination.write(instruction);
+					}
+				}
+				if (isPage || renderer?.name === 'astro:jsx') {
+					destination.write(html);
+				} else if (html && html.length > 0) {
+					destination.write(
+						markHTMLString(
+							removeStaticAstroSlot(html, renderer?.ssr?.supportsAstroStaticSlot ?? false)
+						)
+					);
+				}
+			},
+		};
 	}
 
 	// Include componentExport name, componentUrl, and props in hash to dedupe identical islands
 	const astroId = shorthash(
 		`<!--${metadata.componentExport!.value}:${metadata.componentUrl}-->\n${html}\n${serializeProps(
-			props
+			props,
+			metadata
 		)}`
 	);
 
@@ -317,7 +333,13 @@ If you're still stuck, please open an issue on GitHub or join us at https://astr
 	if (html) {
 		if (Object.keys(children).length > 0) {
 			for (const key of Object.keys(children)) {
-				if (!html.includes(key === 'default' ? `<astro-slot>` : `<astro-slot name="${key}">`)) {
+				let tagName = renderer?.ssr?.supportsAstroStaticSlot
+					? !!metadata.hydrate
+						? 'astro-slot'
+						: 'astro-static-slot'
+					: 'astro-slot';
+				let expectedHTML = key === 'default' ? `<${tagName}>` : `<${tagName} name="${key}">`;
+				if (!html.includes(expectedHTML)) {
 					unrenderedSlots.push(key);
 				}
 			}
@@ -341,12 +363,185 @@ If you're still stuck, please open an issue on GitHub or join us at https://astr
 
 	if (island.children) {
 		island.props['await-children'] = '';
+		// Marker to signal that Astro island children is completed while streaming
+		island.children += `<!--astro:end-->`;
 	}
 
-	async function* renderAll() {
-		yield { type: 'directive', hydration, result };
-		yield markHTMLString(renderElement('astro-island', island, false));
+	return {
+		render(destination) {
+			// Render the html
+			if (slotInstructions) {
+				for (const instruction of slotInstructions) {
+					destination.write(instruction);
+				}
+			}
+			destination.write(createRenderInstruction({ type: 'directive', hydration }));
+			destination.write(markHTMLString(renderElement('astro-island', island, false)));
+		},
+	};
+}
+
+function sanitizeElementName(tag: string) {
+	const unsafe = /[&<>'"\s]+/g;
+	if (!unsafe.test(tag)) return tag;
+	return tag.trim().split(unsafe)[0].trim();
+}
+
+async function renderFragmentComponent(
+	result: SSRResult,
+	slots: ComponentSlots = {}
+): Promise<RenderInstance> {
+	const children = await renderSlotToString(result, slots?.default);
+	return {
+		render(destination) {
+			if (children == null) return;
+			destination.write(children);
+		},
+	};
+}
+
+async function renderHTMLComponent(
+	result: SSRResult,
+	Component: unknown,
+	_props: Record<string | number, any>,
+	slots: any = {}
+): Promise<RenderInstance> {
+	const { slotInstructions, children } = await renderSlots(result, slots);
+	const html = (Component as any)({ slots: children });
+	const hydrationHtml = slotInstructions
+		? slotInstructions.map((instr) => chunkToString(result, instr)).join('')
+		: '';
+	return {
+		render(destination) {
+			destination.write(markHTMLString(hydrationHtml + html));
+		},
+	};
+}
+
+function renderAstroComponent(
+	result: SSRResult,
+	displayName: string,
+	Component: AstroComponentFactory,
+	props: Record<string | number, any>,
+	slots: any = {}
+): RenderInstance {
+	const instance = createAstroComponentInstance(result, displayName, Component, props, slots);
+	return {
+		async render(destination) {
+			// NOTE: This render call can't be pre-invoked outside of this function as it'll also initialize the slots
+			// recursively, which causes each Astro components in the tree to be called bottom-up, and is incorrect.
+			// The slots are initialized eagerly for head propagation.
+			await instance.render(destination);
+		},
+	};
+}
+
+export async function renderComponent(
+	result: SSRResult,
+	displayName: string,
+	Component: unknown,
+	props: Record<string | number, any>,
+	slots: any = {}
+): Promise<RenderInstance> {
+	if (isPromise(Component)) {
+		Component = await Component;
 	}
 
-	return renderAll();
+	if (isFragmentComponent(Component)) {
+		return await renderFragmentComponent(result, slots);
+	}
+
+	// Ensure directives (`class:list`) are processed
+	props = normalizeProps(props);
+
+	// .html components
+	if (isHTMLComponent(Component)) {
+		return await renderHTMLComponent(result, Component, props, slots);
+	}
+
+	if (isAstroComponentFactory(Component)) {
+		return renderAstroComponent(result, displayName, Component, props, slots);
+	}
+
+	return await renderFrameworkComponent(result, displayName, Component, props, slots);
+}
+
+function normalizeProps(props: Record<string, any>): Record<string, any> {
+	if (props['class:list'] !== undefined) {
+		const value = props['class:list'];
+		delete props['class:list'];
+		props['class'] = clsx(props['class'], value);
+		if (props['class'] === '') {
+			delete props['class'];
+		}
+	}
+	return props;
+}
+
+export async function renderComponentToString(
+	result: SSRResult,
+	displayName: string,
+	Component: unknown,
+	props: Record<string | number, any>,
+	slots: any = {},
+	isPage = false,
+	route?: RouteData
+): Promise<string> {
+	let str = '';
+	let renderedFirstPageChunk = false;
+
+	// Handle head injection if required. Note that this needs to run early so
+	// we can ensure getting a value for `head`.
+	let head = '';
+	if (nonAstroPageNeedsHeadInjection(Component)) {
+		for (const headChunk of maybeRenderHead()) {
+			head += chunkToString(result, headChunk);
+		}
+	}
+
+	try {
+		const destination: RenderDestination = {
+			write(chunk) {
+				// Automatic doctype and head insertion for pages
+				if (isPage && !renderedFirstPageChunk) {
+					renderedFirstPageChunk = true;
+					if (!/<!doctype html/i.test(String(chunk))) {
+						const doctype = result.compressHTML ? '<!DOCTYPE html>' : '<!DOCTYPE html>\n';
+						str += doctype + head;
+					}
+				}
+
+				// `renderToString` doesn't work with emitting responses, so ignore here
+				if (chunk instanceof Response) return;
+
+				str += chunkToString(result, chunk);
+			},
+		};
+
+		const renderInstance = await renderComponent(result, displayName, Component, props, slots);
+		await renderInstance.render(destination);
+	} catch (e) {
+		// We don't have a lot of information downstream, and upstream we can't catch the error properly
+		// So let's add the location here
+		if (AstroError.is(e) && !e.loc) {
+			e.setLocation({
+				file: route?.component,
+			});
+		}
+
+		throw e;
+	}
+
+	return str;
+}
+
+export type NonAstroPageComponent = {
+	name: string;
+	[needsHeadRenderingSymbol]: boolean;
+};
+
+function nonAstroPageNeedsHeadInjection(
+	pageComponent: any
+): pageComponent is NonAstroPageComponent {
+	return !!pageComponent?.[needsHeadRenderingSymbol];
 }

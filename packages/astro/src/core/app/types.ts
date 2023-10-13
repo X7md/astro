@@ -1,12 +1,17 @@
-import type { MarkdownRenderingOptions } from '@astrojs/markdown-remark';
 import type {
-	ComponentInstance,
 	RouteData,
 	SerializedRouteData,
+	SSRComponentMetadata,
 	SSRLoadedRenderer,
-} from '../../@types/astro';
+	SSRResult,
+} from '../../@types/astro.js';
+import type { SinglePageBuiltModule } from '../build/types.js';
 
 export type ComponentPath = string;
+
+export type StylesheetAsset =
+	| { type: 'inline'; content: string }
+	| { type: 'external'; src: string };
 
 export interface RouteInfo {
 	routeData: RouteData;
@@ -18,27 +23,42 @@ export interface RouteInfo {
 		// Hoisted
 		| { type: 'inline' | 'external'; value: string }
 	)[];
+	styles: StylesheetAsset[];
 }
 
 export type SerializedRouteInfo = Omit<RouteInfo, 'routeData'> & {
 	routeData: SerializedRouteData;
 };
 
-export interface SSRManifest {
+export type ImportComponentInstance = () => Promise<SinglePageBuiltModule>;
+
+export type SSRManifest = {
 	adapterName: string;
 	routes: RouteInfo[];
 	site?: string;
-	base?: string;
-	markdown: MarkdownRenderingOptions;
-	pageMap: Map<ComponentPath, ComponentInstance>;
+	base: string;
+	compressHTML: boolean;
+	assetsPrefix?: string;
 	renderers: SSRLoadedRenderer[];
+	/**
+	 * Map of directive name (e.g. `load`) to the directive script code
+	 */
+	clientDirectives: Map<string, string>;
 	entryModules: Record<string, string>;
 	assets: Set<string>;
-}
+	componentMetadata: SSRResult['componentMetadata'];
+	pageModule?: SinglePageBuiltModule;
+	pageMap?: Map<ComponentPath, ImportComponentInstance>;
+};
 
-export type SerializedSSRManifest = Omit<SSRManifest, 'routes' | 'assets'> & {
+export type SerializedSSRManifest = Omit<
+	SSRManifest,
+	'routes' | 'assets' | 'componentMetadata' | 'clientDirectives'
+> & {
 	routes: SerializedRouteInfo[];
 	assets: string[];
+	componentMetadata: [string, SSRComponentMetadata][];
+	clientDirectives: [string, string][];
 };
 
 export type AdapterCreateExports<T = any> = (

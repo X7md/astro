@@ -1,7 +1,7 @@
 {
   "name": "@astrojs/vercel",
   "description": "Deploy your site to Vercel",
-  "version": "1.0.1",
+  "version": "5.0.2",
   "type": "module",
   "author": "withastro",
   "license": "MIT",
@@ -17,11 +17,15 @@
   "bugs": "https://github.com/withastro/astro/issues",
   "homepage": "https://docs.astro.build/en/guides/integrations-guide/vercel/",
   "exports": {
-    "./edge": "./dist/edge/adapter.js",
-    "./edge/entrypoint": "./dist/edge/entrypoint.js",
+    "./edge": "./dist/edge/throw.js",
+    "./edge/entrypoint": "./dist/edge/throw.js",
     "./serverless": "./dist/serverless/adapter.js",
     "./serverless/entrypoint": "./dist/serverless/entrypoint.js",
     "./static": "./dist/static/adapter.js",
+    "./speed-insights": "./dist/speed-insights.js",
+    "./build-image-service": "./dist/image/build-service.js",
+    "./dev-image-service": "./dist/image/dev-service.js",
+    "./squoosh-dev-service": "./dist/image/squoosh-dev-service.js",
     "./package.json": "./package.json"
   },
   "typesVersions": {
@@ -37,18 +41,39 @@
       ]
     }
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "astro-scripts build \"src/**/*.ts\" && tsc",
     "build:ci": "astro-scripts build \"src/**/*.ts\"",
     "dev": "astro-scripts dev \"src/**/*.ts\"",
-    "test": "mocha --exit --timeout 20000 test/"
+    "test": "mocha --exit --timeout 20000 --file \"./test/setup.js\" test/ --ignore test/hosted",
+    "test:hosted": "mocha --exit --timeout 30000 test/hosted"
   },
   "dependencies": {
-    "@astrojs/webapi": "^1.0.0",
-    "@vercel/nft": "^0.18.2"
+    "@astrojs/internal-helpers": "workspace:*",
+    "@vercel/analytics": "^1.0.2",
+    "@vercel/nft": "^0.23.1",
+    "esbuild": "^0.19.2",
+    "fast-glob": "^3.3.1",
+    "set-cookie-parser": "^2.6.0",
+    "web-vitals": "^3.4.0"
+  },
+  "peerDependencies": {
+    "astro": "workspace:^3.3.0"
   },
   "devDependencies": {
+    "@types/set-cookie-parser": "^2.4.3",
+    "@vercel/edge": "^1.0.0",
     "astro": "workspace:*",
-    "astro-scripts": "workspace:*"
+    "astro-scripts": "workspace:*",
+    "chai": "^4.3.7",
+    "chai-jest-snapshot": "^2.0.0",
+    "cheerio": "1.0.0-rc.12",
+    "mocha": "^10.2.0"
+  },
+  "publishConfig": {
+    "provenance": true
   }
 }

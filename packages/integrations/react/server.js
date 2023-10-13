@@ -1,6 +1,8 @@
 import React from 'react';
 import ReactDOM from 'react-dom/server';
 import StaticHtml from './static-html.js';
+import { incrementId } from './context.js';
+import opts from 'astro:react:opts';
 
 const slotName = (str) => str.trim().replace(/[-_]([a-z])/g, (_, w) => w.toUpperCase());
 const reactTypeof = Symbol.for('react.element');
@@ -17,8 +19,7 @@ async function check(Component, props, children) {
 	// Note: there are packages that do some unholy things to create "components".
 	// Checking the $$typeof property catches most of these patterns.
 	if (typeof Component === 'object') {
-		const $$typeof = Component['$$typeof'];
-		return $$typeof && $$typeof.toString().slice('Symbol('.length).startsWith('react');
+		return Component['$$typeof'].toString().slice('Symbol('.length).startsWith('react');
 	}
 	if (typeof Component !== 'function') return false;
 
@@ -57,44 +58,71 @@ async function getNodeWritable() {
 	return Writable;
 }
 
+function needsHydration(metadata) {
+	// Adjust how this is hydrated only when the version of Astro supports `astroStaticSlot`
+	return metadata.astroStaticSlot ? !!metadata.hydrate : true;
+}
+
 async function renderToStaticMarkup(Component, props, { default: children, ...slotted }, metadata) {
+	let prefix;
+	if (this && this.result) {
+		prefix = incrementId(this.result);
+	}
+	const attrs = { prefix };
+
 	delete props['class'];
 	const slots = {};
 	for (const [key, value] of Object.entries(slotted)) {
 		const name = slotName(key);
-		slots[name] = React.createElement(StaticHtml, { value, name });
+		slots[name] = React.createElement(StaticHtml, {
+			hydrate: needsHydration(metadata),
+			value,
+			name,
+		});
 	}
 	// Note: create newProps to avoid mutating `props` before they are serialized
 	const newProps = {
 		...props,
 		...slots,
-		children: children != null ? React.createElement(StaticHtml, { value: children }) : undefined,
 	};
+	const newChildren = children ?? props.children;
+	if (children && opts.experimentalReactChildren) {
+		const convert = await import('./vnode-children.js').then((mod) => mod.default);
+		newProps.children = convert(children);
+	} else if (newChildren != null) {
+		newProps.children = React.createElement(StaticHtml, {
+			hydrate: needsHydration(metadata),
+			value: newChildren,
+		});
+	}
 	const vnode = React.createElement(Component, newProps);
+	const renderOptions = {
+		identifierPrefix: prefix,
+	};
 	let html;
-	if (metadata && metadata.hydrate) {
-		html = ReactDOM.renderToString(vnode);
+	if (metadata?.hydrate) {
 		if ('renderToReadableStream' in ReactDOM) {
-			html = await renderToReadableStreamAsync(vnode);
+			html = await renderToReadableStreamAsync(vnode, renderOptions);
 		} else {
-			html = await renderToPipeableStreamAsync(vnode);
+			html = await renderToPipeableStreamAsync(vnode, renderOptions);
 		}
 	} else {
 		if ('renderToReadableStream' in ReactDOM) {
-			html = await renderToReadableStreamAsync(vnode);
+			html = await renderToReadableStreamAsync(vnode, renderOptions);
 		} else {
-			html = await renderToStaticNodeStreamAsync(vnode);
+			html = await renderToStaticNodeStreamAsync(vnode, renderOptions);
 		}
 	}
-	return { html };
+	return { html, attrs };
 }
 
-async function renderToPipeableStreamAsync(vnode) {
+async function renderToPipeableStreamAsync(vnode, options) {
 	const Writable = await getNodeWritable();
 	let html = '';
 	return new Promise((resolve, reject) => {
 		let error = undefined;
 		let stream = ReactDOM.renderToPipeableStream(vnode, {
+			...options,
 			onError(err) {
 				error = err;
 				reject(error);
@@ -116,11 +144,14 @@ async function renderToPipeableStreamAsync(vnode) {
 	});
 }
 
-async function renderToStaticNodeStreamAsync(vnode) {
+async function renderToStaticNodeStreamAsync(vnode, options) {
 	const Writable = await getNodeWritable();
 	let html = '';
-	return new Promise((resolve) => {
-		let stream = ReactDOM.renderToStaticNodeStream(vnode);
+	return new Promise((resolve, reject) => {
+		let stream = ReactDOM.renderToStaticNodeStream(vnode, options);
+		stream.on('error', (err) => {
+			reject(err);
+		});
 		stream.pipe(
 			new Writable({
 				write(chunk, _encoding, callback) {
@@ -135,17 +166,36 @@ async function renderToStaticNodeStreamAsync(vnode) {
 	});
 }
 
-async function renderToReadableStreamAsync(vnode) {
-	const decoder = new TextDecoder();
-	const stream = await ReactDOM.renderToReadableStream(vnode);
-	let html = '';
-	for await (const chunk of stream) {
-		html += decoder.decode(chunk);
+/**
+ * Use a while loop instead of "for await" due to cloudflare and Vercel Edge issues
+ * See https://github.com/facebook/react/issues/24169
+ */
+async function readResult(stream) {
+	const reader = stream.getReader();
+	let result = '';
+	const decoder = new TextDecoder('utf-8');
+	while (true) {
+		const { done, value } = await reader.read();
+		if (done) {
+			if (value) {
+				result += decoder.decode(value);
+			} else {
+				// This closes the decoder
+				decoder.decode(new Uint8Array());
+			}
+
+			return result;
+		}
+		result += decoder.decode(value, { stream: true });
 	}
-	return html;
+}
+
+async function renderToReadableStreamAsync(vnode, options) {
+	return await readResult(await ReactDOM.renderToReadableStream(vnode, options));
 }
 
 export default {
 	check,
 	renderToStaticMarkup,
+	supportsAstroStaticSlot: true,
 };

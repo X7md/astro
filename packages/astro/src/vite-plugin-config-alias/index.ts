@@ -1,77 +1,49 @@
-import * as path from 'path';
-import * as tsr from 'tsconfig-resolver';
-import * as url from 'url';
-import type { AstroConfig } from '../@types/astro';
+import path from 'node:path';
+import type { CompilerOptions } from 'typescript';
+import { normalizePath, type ResolvedConfig, type Plugin as VitePlugin } from 'vite';
+import type { AstroSettings } from '../@types/astro.js';
 
-import type * as vite from 'vite';
-
-/** Result of successfully parsed tsconfig.json or jsconfig.json. */
-export declare interface Alias {
+type Alias = {
 	find: RegExp;
 	replacement: string;
-}
-
-/** Returns a path with its slashes replaced with posix slashes. */
-const normalize = (pathname: string) => String(pathname).split(path.sep).join(path.posix.sep);
-
-/** Returns the results of a config file if it exists, otherwise null. */
-const getExistingConfig = (
-	searchName: string,
-	cwd: string | undefined
-): tsr.TsConfigResultSuccess | null => {
-	const config = tsr.tsconfigResolverSync({ cwd, searchName });
-
-	return config.exists ? config : null;
 };
 
 /** Returns a list of compiled aliases. */
-const getConfigAlias = (cwd: string | undefined): Alias[] | null => {
-	/** Closest tsconfig.json or jsconfig.json */
-	const config = getExistingConfig('tsconfig.json', cwd) || getExistingConfig('jsconfig.json', cwd);
+const getConfigAlias = (settings: AstroSettings): Alias[] | null => {
+	const { tsConfig, tsConfigPath } = settings;
+	if (!tsConfig || !tsConfigPath || !tsConfig.compilerOptions) return null;
 
-	// if no config was found, return null
-	if (!config) return null;
-
-	/** Compiler options from tsconfig.json or jsconfig.json. */
-	const compilerOptions = Object(config.config.compilerOptions);
-
-	// if no compilerOptions.baseUrl was defined, return null
-	if (!compilerOptions.baseUrl) return null;
+	const { baseUrl, paths } = tsConfig.compilerOptions as CompilerOptions;
+	if (!baseUrl) return null;
 
 	// resolve the base url from the configuration file directory
-	const baseUrl = path.posix.resolve(
-		path.posix.dirname(normalize(config.path).replace(/^\/?/, '/')),
-		normalize(compilerOptions.baseUrl)
-	);
+	const resolvedBaseUrl = path.resolve(path.dirname(tsConfigPath), baseUrl);
 
-	/** List of compiled alias expressions. */
 	const aliases: Alias[] = [];
 
 	// compile any alias expressions and push them to the list
-	for (let [alias, values] of Object.entries(
-		Object(compilerOptions.paths) as { [key: string]: string[] }
-	)) {
-		values = [].concat(values as never);
+	if (paths) {
+		for (const [alias, values] of Object.entries(paths)) {
+			/** Regular Expression used to match a given path. */
+			const find = new RegExp(
+				`^${[...alias]
+					.map((segment) =>
+						segment === '*' ? '(.+)' : segment.replace(/[\\^$*+?.()|[\]{}]/, '\\$&')
+					)
+					.join('')}$`
+			);
 
-		/** Regular Expression used to match a given path. */
-		const find = new RegExp(
-			`^${[...alias]
-				.map((segment) =>
-					segment === '*' ? '(.+)' : segment.replace(/[\\^$*+?.()|[\]{}]/, '\\$&')
-				)
-				.join('')}$`
-		);
+			/** Internal index used to calculate the matching id in a replacement. */
+			let matchId = 0;
 
-		/** Internal index used to calculate the matching id in a replacement. */
-		let matchId = 0;
+			for (const value of values) {
+				/** String used to replace a matched path. */
+				const replacement = [...normalizePath(path.resolve(resolvedBaseUrl, value))]
+					.map((segment) => (segment === '*' ? `$${++matchId}` : segment === '$' ? '$$' : segment))
+					.join('');
 
-		for (let value of values) {
-			/** String used to replace a matched path. */
-			const replacement = [...path.posix.resolve(baseUrl, value)]
-				.map((segment) => (segment === '*' ? `$${++matchId}` : segment === '$' ? '$$' : segment))
-				.join('');
-
-			aliases.push({ find, replacement });
+				aliases.push({ find, replacement });
+			}
 		}
 	}
 
@@ -79,51 +51,95 @@ const getConfigAlias = (cwd: string | undefined): Alias[] | null => {
 	// - `baseUrl` changes the way non-relative specifiers are resolved
 	// - if `baseUrl` exists then all non-relative specifiers are resolved relative to it
 	aliases.push({
-		find: /^(?!\.*\/)(.+)$/,
-		replacement: `${[...baseUrl].map((segment) => (segment === '$' ? '$$' : segment)).join('')}/$1`,
+		find: /^(?!\.*\/|\.*$|\w:)(.+)$/,
+		replacement: `${[...normalizePath(resolvedBaseUrl)]
+			.map((segment) => (segment === '$' ? '$$' : segment))
+			.join('')}/$1`,
 	});
 
 	return aliases;
 };
 
-/** Returns a Vite plugin used to alias pathes from tsconfig.json and jsconfig.json. */
+/** Returns a Vite plugin used to alias paths from tsconfig.json and jsconfig.json. */
 export default function configAliasVitePlugin({
-	config: astroConfig,
+	settings,
 }: {
-	config: AstroConfig;
-}): vite.PluginOption {
-	/** Aliases from the tsconfig.json or jsconfig.json configuration. */
-	const configAlias = getConfigAlias(astroConfig.root && url.fileURLToPath(astroConfig.root));
+	settings: AstroSettings;
+}): VitePlugin | null {
+	const configAlias = getConfigAlias(settings);
+	if (!configAlias) return null;
 
-	// if no config alias was found, bypass this plugin
-	if (!configAlias) return {} as vite.PluginOption;
-
-	return {
+	const plugin: VitePlugin = {
 		name: 'astro:tsconfig-alias',
-		enforce: 'pre',
-		async resolveId(sourceId: string, importer, options) {
-			/** Resolved ID conditionally handled by any other resolver. (this gives priority to all other resolvers) */
-			const resolvedId = await this.resolve(sourceId, importer, { skipSelf: true, ...options });
+		// use post to only resolve ids that all other plugins before it can't
+		enforce: 'post',
+		configResolved(config) {
+			patchCreateResolver(config, plugin);
+		},
+		async resolveId(id, importer, options) {
+			if (isVirtualId(id)) return;
 
-			// if any other resolver handles the file, return that resolution
-			if (resolvedId) return resolvedId;
-
-			// conditionally resolve the source ID from any matching alias or baseUrl
+			// Handle aliases found from `compilerOptions.paths`. Unlike Vite aliases, tsconfig aliases
+			// are best effort only, so we have to manually replace them here, instead of using `vite.resolve.alias`
 			for (const alias of configAlias) {
-				if (alias.find.test(sourceId)) {
-					/** Processed Source ID with our alias applied. */
-					const aliasedSourceId = sourceId.replace(alias.find, alias.replacement);
-
-					/** Resolved ID conditionally handled by any other resolver. (this also gives priority to all other resolvers) */
-					const resolvedAliasedId = await this.resolve(aliasedSourceId, importer, {
-						skipSelf: true,
-						...options,
-					});
-
-					// if the existing resolvers find the file, return that resolution
-					if (resolvedAliasedId) return resolvedAliasedId;
+				if (alias.find.test(id)) {
+					const updatedId = id.replace(alias.find, alias.replacement);
+					const resolved = await this.resolve(updatedId, importer, { skipSelf: true, ...options });
+					if (resolved) return resolved;
 				}
 			}
 		},
 	};
+
+	return plugin;
+}
+
+/**
+ * Vite's `createResolver` is used to resolve various things, including CSS `@import`.
+ * However, there's no way to extend this resolver, besides patching it. This function
+ * patches and adds a Vite plugin whose `resolveId` will be used to resolve before the
+ * internal plugins in `createResolver`.
+ *
+ * Vite may simplify this soon: https://github.com/vitejs/vite/pull/10555
+ */
+function patchCreateResolver(config: ResolvedConfig, postPlugin: VitePlugin) {
+	const _createResolver = config.createResolver;
+	// @ts-expect-error override readonly property intentionally
+	config.createResolver = function (...args1: any) {
+		const resolver = _createResolver.apply(config, args1);
+		return async function (...args2: any) {
+			const id: string = args2[0];
+			const importer: string | undefined = args2[1];
+			const ssr: boolean | undefined = args2[3];
+
+			// fast path so we don't run this extensive logic in prebundling
+			if (importer?.includes('node_modules')) {
+				return resolver.apply(_createResolver, args2);
+			}
+
+			const fakePluginContext = {
+				resolve: (_id: string, _importer?: string) => resolver(_id, _importer, false, ssr),
+			};
+			const fakeResolveIdOpts = {
+				assertions: {},
+				isEntry: false,
+				ssr,
+			};
+
+			const result = await resolver.apply(_createResolver, args2);
+			if (result) return result;
+
+			// @ts-expect-error resolveId exists
+			const resolved = await postPlugin.resolveId.apply(fakePluginContext, [
+				id,
+				importer,
+				fakeResolveIdOpts,
+			]);
+			if (resolved) return resolved;
+		};
+	};
+}
+
+function isVirtualId(id: string) {
+	return id.includes('\0') || id.startsWith('virtual:') || id.startsWith('astro:');
 }

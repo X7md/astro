@@ -1,9 +1,9 @@
-import lightcookie from 'lightcookie';
+import { APIContext } from 'astro';
 import { userCartItems } from '../../models/session';
 
-export function get(_params: any, request: Request) {
-	let cookie = request.headers.get('cookie');
-	let userId = cookie ? lightcookie.parse(cookie)['user-id'] : '1'; // default for testing
+export function GET({ cookies }: APIContext) {
+	let userId = cookies.get('user-id').value;
+
 	if (!userId || !userCartItems.has(userId)) {
 		return {
 			body: JSON.stringify({ items: [] }),
@@ -12,9 +12,7 @@ export function get(_params: any, request: Request) {
 	let items = userCartItems.get(userId);
 	let array = Array.from(items.values());
 
-	return {
-		body: JSON.stringify({ items: array }),
-	};
+	return new Response(JSON.stringify({ items: array }));
 }
 
 interface AddToCartItem {
@@ -22,11 +20,10 @@ interface AddToCartItem {
 	name: string;
 }
 
-export async function post(_params: any, request: Request) {
+export async function POST({ cookies, request }: APIContext) {
 	const item: AddToCartItem = await request.json();
 
-	let cookie = request.headers.get('cookie');
-	let userId = lightcookie.parse(cookie)['user-id'];
+	let userId = cookies.get('user-id').value;
 
 	if (!userCartItems.has(userId)) {
 		userCartItems.set(userId, new Map());
@@ -39,9 +36,9 @@ export async function post(_params: any, request: Request) {
 		cart.set(item.id, { id: item.id, name: item.name, count: 1 });
 	}
 
-	return {
-		body: JSON.stringify({
+	return new Response(
+		JSON.stringify({
 			ok: true,
-		}),
-	};
+		})
+	);
 }

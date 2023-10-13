@@ -1,49 +1,53 @@
-import type * as shiki from 'shiki';
-import { getHighlighter } from 'shiki';
+import { bundledLanguages, getHighlighter, type Highlighter } from 'shikiji';
 import { visit } from 'unist-util-visit';
-import type { ShikiConfig } from './types.js';
+import type { RemarkPlugin, ShikiConfig } from './types.js';
+
+const ASTRO_COLOR_REPLACEMENTS: Record<string, string> = {
+	'#000001': 'var(--astro-code-color-text)',
+	'#000002': 'var(--astro-code-color-background)',
+	'#000004': 'var(--astro-code-token-constant)',
+	'#000005': 'var(--astro-code-token-string)',
+	'#000006': 'var(--astro-code-token-comment)',
+	'#000007': 'var(--astro-code-token-keyword)',
+	'#000008': 'var(--astro-code-token-parameter)',
+	'#000009': 'var(--astro-code-token-function)',
+	'#000010': 'var(--astro-code-token-string-expression)',
+	'#000011': 'var(--astro-code-token-punctuation)',
+	'#000012': 'var(--astro-code-token-link)',
+};
+const COLOR_REPLACEMENT_REGEX = new RegExp(
+	`(${Object.keys(ASTRO_COLOR_REPLACEMENTS).join('|')})`,
+	'g'
+);
 
 /**
  * getHighlighter() is the most expensive step of Shiki. Instead of calling it on every page,
  * cache it here as much as possible. Make sure that your highlighters can be cached, state-free.
  * We make this async, so that multiple calls to parse markdown still share the same highlighter.
  */
-const highlighterCacheAsync = new Map<string, Promise<shiki.Highlighter>>();
+const highlighterCacheAsync = new Map<string, Promise<Highlighter>>();
 
-const remarkShiki = async (
-	{ langs = [], theme = 'github-dark', wrap = false }: ShikiConfig,
-	scopedClassName?: string | null
-) => {
-	const cacheID: string = typeof theme === 'string' ? theme : theme.name;
-	let highlighterAsync = highlighterCacheAsync.get(cacheID);
+export function remarkShiki({
+	langs = [],
+	theme = 'github-dark',
+	wrap = false,
+}: ShikiConfig = {}): ReturnType<RemarkPlugin> {
+	const cacheId =
+		(typeof theme === 'string' ? theme : theme.name ?? '') +
+		langs.map((l) => l.name ?? (l as any).id).join(',');
+
+	let highlighterAsync = highlighterCacheAsync.get(cacheId);
 	if (!highlighterAsync) {
-		highlighterAsync = getHighlighter({ theme }).then((hl) => {
-			hl.setColorReplacements({
-				'#000001': 'var(--astro-code-color-text)',
-				'#000002': 'var(--astro-code-color-background)',
-				'#000004': 'var(--astro-code-token-constant)',
-				'#000005': 'var(--astro-code-token-string)',
-				'#000006': 'var(--astro-code-token-comment)',
-				'#000007': 'var(--astro-code-token-keyword)',
-				'#000008': 'var(--astro-code-token-parameter)',
-				'#000009': 'var(--astro-code-token-function)',
-				'#000010': 'var(--astro-code-token-string-expression)',
-				'#000011': 'var(--astro-code-token-punctuation)',
-				'#000012': 'var(--astro-code-token-link)',
-			});
-			return hl;
+		highlighterAsync = getHighlighter({
+			langs: langs.length ? langs : Object.keys(bundledLanguages),
+			themes: [theme],
 		});
-		highlighterCacheAsync.set(cacheID, highlighterAsync);
-	}
-	const highlighter = await highlighterAsync;
-
-	// NOTE: There may be a performance issue here for large sites that use `lang`.
-	// Since this will be called on every page load. Unclear how to fix this.
-	for (const lang of langs) {
-		await highlighter.loadLanguage(lang);
+		highlighterCacheAsync.set(cacheId, highlighterAsync);
 	}
 
-	return () => (tree: any) => {
+	return async (tree: any) => {
+		const highlighter = await highlighterAsync!;
+
 		visit(tree, 'code', (node) => {
 			let lang: string;
 
@@ -60,7 +64,7 @@ const remarkShiki = async (
 				lang = 'plaintext';
 			}
 
-			let html = highlighter!.codeToHtml(node.value, { lang });
+			let html = highlighter.codeToHtml(node.value, { lang, theme });
 
 			// Q: Couldn't these regexes match on a user's inputted code blocks?
 			// A: Nope! All rendered HTML is properly escaped.
@@ -68,11 +72,8 @@ const remarkShiki = async (
 			// It would become this before hitting our regexes:
 			// &lt;span class=&quot;line&quot;
 
-			// Replace "shiki" class naming with "astro" and add "is:raw".
-			html = html.replace(
-				'<pre class="shiki"',
-				`<pre is:raw class="astro-code${scopedClassName ? ' ' + scopedClassName : ''}"`
-			);
+			// Replace "shiki" class naming with "astro".
+			html = html.replace(/<pre class="(.*?)shiki(.*?)"/, `<pre class="$1astro-code$2"`);
 			// Add "user-select: none;" for "+"/"-" diff symbols
 			if (node.lang === 'diff') {
 				html = html.replace(
@@ -91,9 +92,10 @@ const remarkShiki = async (
 				);
 			}
 
-			// Apply scopedClassName to all nested lines
-			if (scopedClassName) {
-				html = html.replace(/\<span class="line"\>/g, `<span class="line ${scopedClassName}"`);
+			// theme.id for shiki -> shikiji compat
+			const themeName = typeof theme === 'string' ? theme : theme.name;
+			if (themeName === 'css-variables') {
+				html = html.replace(/style="(.*?)"/g, (m) => replaceCssVariables(m));
 			}
 
 			node.type = 'html';
@@ -101,6 +103,11 @@ const remarkShiki = async (
 			node.children = [];
 		});
 	};
-};
+}
 
-export default remarkShiki;
+/**
+ * shiki -> shikiji compat as we need to manually replace it
+ */
+function replaceCssVariables(str: string) {
+	return str.replace(COLOR_REPLACEMENT_REGEX, (match) => ASTRO_COLOR_REPLACEMENTS[match] || match);
+}

@@ -3,11 +3,8 @@
 // @ts-check
 
 import { execa } from 'execa';
-import { polyfill } from '@astrojs/webapi';
-import { fileURLToPath } from 'node:url';
 import { promises as fs } from 'node:fs';
-
-polyfill(globalThis, { exclude: 'window document' });
+import { fileURLToPath } from 'node:url';
 
 /** URL directory containing the entire project. */
 const rootDir = new URL('../../', import.meta.url);
@@ -46,7 +43,7 @@ async function run() {
 		console.log('🤖', 'Testing', name);
 
 		try {
-			await execa('pnpm', ['install', '--ignore-scripts', '--frozen-lockfile=false', isExternal ? '--shamefully-hoist' : ''].filter(x => x), { cwd: fileURLToPath(directory), stdio: 'inherit' });
+			await execa('pnpm', ['install', '--ignore-scripts', '--frozen-lockfile=false'].filter(x => x), { cwd: fileURLToPath(directory), stdio: 'inherit' });
 			await execa('pnpm', ['astro', 'telemetry', 'disable']);
 			await execa('pnpm', ['run', 'build'], { cwd: fileURLToPath(directory), stdio: 'inherit' });
 		} catch (err) {

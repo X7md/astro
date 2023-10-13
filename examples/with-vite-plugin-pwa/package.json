@@ -1,5 +1,6 @@
 {
   "name": "@example/with-vite-plugin-pwa",
+  "type": "module",
   "version": "0.0.1",
   "private": true,
   "scripts": {
@@ -9,9 +10,9 @@
     "preview": "astro preview",
     "astro": "astro"
   },
-  "devDependencies": {
-    "astro": "^1.1.2",
-    "vite-plugin-pwa": "0.11.11",
-    "workbox-window": "^6.5.3"
+  "dependencies": {
+    "astro": "^3.3.0",
+    "vite-plugin-pwa": "0.16.4",
+    "workbox-window": "^7.0.0"
   }
 }

@@ -1,10 +1,6 @@
-# Ignoring these files for now due to https://github.com/withastro/compiler/issues/318
-examples/basics/src/layouts
-examples/blog/src/layouts
-examples/with-nanostores/src/layouts
-
-# Ignoring this file for now due to https://github.com/withastro/compiler/issues/485
-packages/markdown/component/Markdown.astro
+# Benchmark artifacts
+benchmark/projects/
+benchmark/results/
 
 # Deep Directories
 **/dist
@@ -13,14 +9,10 @@ packages/markdown/component/Markdown.astro
 **/fixtures
 **/vendor
 **/.vercel
-examples/docs/**/*.md
-examples/blog/**/*.md
 
 # Directories
 .github
 .changeset
 
 # Files
-README.md
-packages/webapi/mod.d.ts
 pnpm-lock.yaml

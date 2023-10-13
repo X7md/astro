@@ -1,12 +1,18 @@
-import type { EndpointHandler } from '../../../@types/astro';
-import type { SSROptions } from '../../render/dev';
-import { preload } from '../../render/dev/index.js';
-import { call as callEndpoint } from '../index.js';
+import type { EndpointHandler } from '../../../@types/astro.js';
+import { createRenderContext, type SSROptions } from '../../render/index.js';
+import { callEndpoint } from '../index.js';
 
-export async function call(ssrOpts: SSROptions) {
-	const [, mod] = await preload(ssrOpts);
-	return await callEndpoint(mod as unknown as EndpointHandler, {
-		...ssrOpts,
-		ssr: ssrOpts.astroConfig.output === 'server',
+export async function call(options: SSROptions) {
+	const { env, preload, middleware } = options;
+	const endpointHandler = preload as unknown as EndpointHandler;
+
+	const ctx = await createRenderContext({
+		request: options.request,
+		pathname: options.pathname,
+		route: options.route,
+		env,
+		mod: preload,
 	});
+
+	return await callEndpoint(endpointHandler, env, ctx, middleware?.onRequest);
 }

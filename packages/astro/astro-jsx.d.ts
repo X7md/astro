@@ -9,6 +9,8 @@
  * Adapted from React’s TypeScript definition from DefinitelyTyped.
  * @see https://github.com/DefinitelyTyped/DefinitelyTyped/blob/master/types/react/index.d.ts
  */
+// BUG! Prettier 3.0 removes `declare`: https://github.com/prettier/prettier/issues/15207
+// prettier-ignore
 declare namespace astroHTML.JSX {
 	export type Child = Node | Node[] | string | number | boolean | null | undefined | unknown;
 	export type Children = Child | Child[];
@@ -18,17 +20,21 @@ declare namespace astroHTML.JSX {
 		children: {};
 	}
 
-	interface IntrinsicAttributes extends AstroBuiltinProps, AstroBuiltinAttributes {
+	interface IntrinsicAttributes
+		extends AstroBuiltinProps,
+			AstroBuiltinAttributes,
+			AstroClientDirectives {
 		slot?: string;
 		children?: Children;
 	}
 
-	type AstroBuiltinProps = import('./dist/@types/astro').AstroBuiltinProps;
-	type AstroBuiltinAttributes = import('./dist/@types/astro').AstroBuiltinAttributes;
-	type AstroDefineVarsAttribute = import('./dist/@types/astro').AstroDefineVarsAttribute;
-	type AstroScriptAttributes = import('./dist/@types/astro').AstroScriptAttributes &
+	type AstroBuiltinProps = import('./dist/@types/astro.js').AstroBuiltinProps;
+	type AstroClientDirectives = import('./dist/@types/astro.js').AstroClientDirectives;
+	type AstroBuiltinAttributes = import('./dist/@types/astro.js').AstroBuiltinAttributes;
+	type AstroDefineVarsAttribute = import('./dist/@types/astro.js').AstroDefineVarsAttribute;
+	type AstroScriptAttributes = import('./dist/@types/astro.js').AstroScriptAttributes &
 		AstroDefineVarsAttribute;
-	type AstroStyleAttributes = import('./dist/@types/astro').AstroStyleAttributes &
+	type AstroStyleAttributes = import('./dist/@types/astro.js').AstroStyleAttributes &
 		AstroDefineVarsAttribute;
 
 	// This is an unfortunate use of `any`, but unfortunately we can't make a type that works for every framework
@@ -465,6 +471,33 @@ declare namespace astroHTML.JSX {
 		| 'treegrid'
 		| 'treeitem';
 
+	type CssProperty = keyof Omit<
+		CSSStyleDeclaration,
+		| 'item'
+		| 'setProperty'
+		| 'removeProperty'
+		| 'getPropertyValue'
+		| 'getPropertyPriority'
+		| 'parentRule'
+		| 'length'
+		| 'cssFloat'
+		| 'cssText'
+		| typeof Symbol.iterator
+		| number
+	>;
+
+	type KebabCSSDOMProperties = import('./dist/type-utils.js').KebabKeys<DOMCSSProperties>;
+
+	type DOMCSSProperties = {
+		[key in CssProperty]?: string | number | null | undefined;
+	};
+	type AllCSSProperties = {
+		[key: string]: string | number | null | undefined;
+	};
+	type StyleObject = import('./dist/type-utils.js').Simplify<
+		KebabCSSDOMProperties & DOMCSSProperties & AllCSSProperties
+	>;
+
 	interface HTMLAttributes extends AriaAttributes, DOMAttributes, AstroBuiltinAttributes {
 		// Standard HTML Attributes
 		accesskey?: string | undefined | null;
@@ -507,7 +540,7 @@ declare namespace astroHTML.JSX {
 		lang?: string | undefined | null;
 		slot?: string | undefined | null;
 		spellcheck?: 'true' | 'false' | boolean | undefined | null;
-		style?: string | Record<string, any> | undefined | null;
+		style?: string | StyleObject | undefined | null;
 		tabindex?: number | string | undefined | null;
 		title?: string | undefined | null;
 		translate?: 'yes' | 'no' | undefined | null;
@@ -663,6 +696,7 @@ declare namespace astroHTML.JSX {
 		allow?: string | undefined | null;
 		allowfullscreen?: boolean | string | undefined | null;
 		allowtransparency?: boolean | string | undefined | null;
+		fetchpriority?: 'auto' | 'high' | 'low' | undefined | null;
 		/** @deprecated */
 		frameborder?: number | string | undefined | null;
 		height?: number | string | undefined | null;
@@ -686,6 +720,7 @@ declare namespace astroHTML.JSX {
 		alt?: string | undefined | null;
 		crossorigin?: 'anonymous' | 'use-credentials' | '' | undefined | null;
 		decoding?: 'async' | 'auto' | 'sync' | undefined | null;
+		fetchpriority?: 'auto' | 'high' | 'low' | undefined | null;
 		height?: number | string | undefined | null;
 		loading?: 'eager' | 'lazy' | undefined | null;
 		referrerpolicy?: HTMLAttributeReferrerPolicy | undefined | null;
@@ -784,11 +819,12 @@ declare namespace astroHTML.JSX {
 		crossorigin?: boolean | string | undefined | null;
 		href?: string | URL | undefined | null;
 		hreflang?: string | undefined | null;
+		fetchpriority?: 'auto' | 'high' | 'low' | undefined | null;
 		integrity?: string | undefined | null;
 		media?: string | undefined | null;
-		imageSrcSet?: string | undefined | null;
-		imageSizes?: string | undefined | null;
-		referrerPolicy?: HTMLAttributeReferrerPolicy | undefined | null;
+		imagesrcset?: string | undefined | null;
+		imagesizes?: string | undefined | null;
+		referrerpolicy?: HTMLAttributeReferrerPolicy | undefined | null;
 		rel?: string | undefined | null;
 		sizes?: string | undefined | null;
 		type?: string | undefined | null;
@@ -893,6 +929,8 @@ declare namespace astroHTML.JSX {
 		charset?: string | undefined | null;
 		crossorigin?: string | undefined | null;
 		defer?: boolean | string | undefined | null;
+		fetchpriority?: 'auto' | 'high' | 'low' | undefined | null;
+		referrerpolicy?: HTMLAttributeReferrerPolicy | undefined | null;
 		integrity?: string | undefined | null;
 		nomodule?: boolean | string | undefined | null;
 		nonce?: string | undefined | null;
@@ -932,10 +970,10 @@ declare namespace astroHTML.JSX {
 	interface TableHTMLAttributes extends HTMLAttributes {
 		align?: 'left' | 'center' | 'right' | undefined | null;
 		bgcolor?: string | undefined | null;
-		border?: number | undefined | null;
+		border?: string | number | undefined | null;
 		cellpadding?: number | string | undefined | null;
 		cellspacing?: number | string | undefined | null;
-		frame?: boolean | undefined | null;
+		frame?: boolean | 'false' | 'true' | undefined | null;
 		rules?: 'none' | 'groups' | 'rows' | 'columns' | 'all' | undefined | null;
 		summary?: string | undefined | null;
 		width?: number | string | undefined | null;
@@ -1288,7 +1326,7 @@ declare namespace astroHTML.JSX {
 		zoomAndPan?: string | undefined | null;
 	}
 
-	interface IntrinsicElements {
+	interface DefinedIntrinsicElements {
 		// HTML
 		a: AnchorHTMLAttributes;
 		abbr: HTMLAttributes;
@@ -1461,7 +1499,9 @@ declare namespace astroHTML.JSX {
 		tspan: SVGAttributes;
 		use: SVGAttributes;
 		view: SVGAttributes;
+	}
 
+	interface IntrinsicElements extends DefinedIntrinsicElements {
 		// Allow for arbitrary elements
 		[name: string]: { [name: string]: any };
 	}

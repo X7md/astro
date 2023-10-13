@@ -1,5 +1,4 @@
 import { expect } from 'chai';
-import * as cheerio from 'cheerio';
 import { loadFixture } from './test-utils.js';
 
 describe('Development Routing', () => {
@@ -114,9 +113,9 @@ describe('Development Routing', () => {
 			expect(response.status).to.equal(200);
 		});
 
-		it('404 when loading subpath root without trailing slash', async () => {
+		it('200 when loading subpath root without trailing slash', async () => {
 			const response = await fixture.fetch('/blog');
-			expect(response.status).to.equal(404);
+			expect(response.status).to.equal(200);
 		});
 
 		it('200 when loading another page with subpath used', async () => {
@@ -164,9 +163,9 @@ describe('Development Routing', () => {
 			expect(response.status).to.equal(200);
 		});
 
-		it('404 when loading subpath root without trailing slash', async () => {
+		it('200 when loading subpath root without trailing slash', async () => {
 			const response = await fixture.fetch('/blog');
-			expect(response.status).to.equal(404);
+			expect(response.status).to.equal(200);
 		});
 
 		it('200 when loading another page with subpath used', async () => {
@@ -266,6 +265,15 @@ describe('Development Routing', () => {
 			const response = await fixture.fetch('/images/1.svg');
 			expect(response.headers.get('content-type')).to.match(/image\/svg\+xml/);
 		});
+
+		it('correct encoding when loading /images/hex.ts', async () => {
+			const response = await fixture.fetch('/images/hex');
+			const body = await response.arrayBuffer();
+			const hex = Buffer.from(body).toString('hex', 0, 4);
+
+			// Check if we have a PNG
+			expect(hex).to.equal('89504e47');
+		});
 	});
 
 	describe('file format routing', () => {
@@ -283,6 +291,10 @@ describe('Development Routing', () => {
 				site: 'http://example.com/',
 			});
 			devServer = await fixture.startDevServer();
+		});
+
+		after(async () => {
+			await devServer.stop();
 		});
 
 		it('200 when loading /index.html', async () => {
@@ -313,6 +325,18 @@ describe('Development Routing', () => {
 		it('200 when loading /1', async () => {
 			const response = await fixture.fetch('/1');
 			expect(response.status).to.equal(200);
+		});
+
+		it('200 when loading /html-ext/1', async () => {
+			const response = await fixture.fetch('/html-ext/1');
+			expect(response.status).to.equal(200);
+			expect(await response.text()).includes('none: 1');
+		});
+
+		it('200 when loading /html-ext/1.html', async () => {
+			const response = await fixture.fetch('/html-ext/1.html');
+			expect(response.status).to.equal(200);
+			expect(await response.text()).includes('html: 1');
 		});
 	});
 });

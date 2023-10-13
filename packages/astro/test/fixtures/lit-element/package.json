@@ -4,6 +4,8 @@
   "private": true,
   "dependencies": {
     "@astrojs/lit": "workspace:*",
-    "astro": "workspace:*"
+    "@webcomponents/template-shadowroot": "^0.2.1",
+    "astro": "workspace:*",
+    "lit": "^2.8.0"
   }
 }

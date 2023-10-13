@@ -1,4 +1,4 @@
-import type { AstroConfig, RoutePart } from '../../../@types/astro';
+import type { AstroConfig, RoutePart } from '../../../@types/astro.js';
 
 import { compile } from 'path-to-regexp';
 
@@ -8,23 +8,26 @@ export function getRouteGenerator(
 ) {
 	const template = segments
 		.map((segment) => {
-			return segment[0].spread
-				? `/:${segment[0].content.slice(3)}(.*)?`
-				: '/' +
-						segment
-							.map((part) => {
-								if (part)
-									return part.dynamic
-										? `:${part.content}`
-										: part.content
-												.normalize()
-												.replace(/\?/g, '%3F')
-												.replace(/#/g, '%23')
-												.replace(/%5B/g, '[')
-												.replace(/%5D/g, ']')
-												.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-							})
-							.join('');
+			return (
+				'/' +
+				segment
+					.map((part) => {
+						if (part.spread) {
+							return `:${part.content.slice(3)}(.*)?`;
+						} else if (part.dynamic) {
+							return `:${part.content}`;
+						} else {
+							return part.content
+								.normalize()
+								.replace(/\?/g, '%3F')
+								.replace(/#/g, '%23')
+								.replace(/%5B/g, '[')
+								.replace(/%5D/g, ']')
+								.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+						}
+					})
+					.join('')
+			);
 		})
 		.join('');
 

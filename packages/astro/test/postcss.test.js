@@ -4,21 +4,21 @@ import eol from 'eol';
 import { loadFixture } from './test-utils.js';
 
 describe('PostCSS', function () {
-	const PREFIXED_CSS = `{-webkit-appearance:none;appearance:none`;
-
 	let fixture;
 	let bundledCSS;
 	before(async () => {
 		this.timeout(45000); // test needs a little more time in CI
 		fixture = await loadFixture({
 			root: './fixtures/postcss',
+			// test suite was authored when inlineStylesheets defaulted to never
+			build: { inlineStylesheets: 'never' },
 		});
 		await fixture.build();
 
 		// get bundled CSS (will be hashed, hence DOM query)
 		const html = await fixture.readFile('/index.html');
 		const $ = cheerio.load(html);
-		const bundledCSSHREF = $('link[rel=stylesheet][href^=/assets/]').attr('href');
+		const bundledCSSHREF = $('link[rel=stylesheet][href^=/_astro/]').attr('href');
 		bundledCSS = (await fixture.readFile(bundledCSSHREF.replace(/^\/?/, '/')))
 			.replace(/\s/g, '')
 			.replace('/n', '');

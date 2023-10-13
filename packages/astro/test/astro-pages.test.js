@@ -21,6 +21,13 @@ describe('Pages', () => {
 
 			expect($('h1').text()).to.equal('Name with index');
 		});
+
+		it('Can find page with quotes in file name', async () => {
+			const html = await fixture.readFile("/quotes'-work-too/index.html");
+			const $ = cheerio.load(html);
+
+			expect($('h1').text()).to.equal('Quotes work too');
+		});
 	});
 
 	if (isWindows) return;
@@ -41,6 +48,11 @@ describe('Pages', () => {
 			const $ = cheerio.load(html);
 
 			expect($('#testing').length).to.be.greaterThan(0);
+		});
+
+		it('should have Vite client in dev', async () => {
+			const html = await fixture.fetch('/').then((res) => res.text());
+			expect(html).to.include('/@vite/client', 'Markdown page does not have Vite client for HMR');
 		});
 	});
 });

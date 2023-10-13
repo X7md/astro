@@ -1,7 +1,7 @@
 import debugPackage from 'debug';
 import { bold, cyan, dim, red, reset, yellow } from 'kleur/colors';
-import * as readline from 'readline';
-import { Writable } from 'stream';
+import * as readline from 'node:readline';
+import { Writable } from 'node:stream';
 import stringWidth from 'string-width';
 import { dateTimeFormat, error, info, warn } from './core.js';
 
@@ -21,19 +21,19 @@ export const nodeLogDestination = new Writable({
 
 		function getPrefix() {
 			let prefix = '';
-			let type = event.type;
-			if (type) {
+			let label = event.label;
+			if (label) {
 				// hide timestamp when type is undefined
 				prefix += dim(dateTimeFormat.format(new Date()) + ' ');
 				if (event.level === 'info') {
-					type = bold(cyan(`[${type}]`));
+					label = bold(cyan(`[${label}]`));
 				} else if (event.level === 'warn') {
-					type = bold(yellow(`[${type}]`));
+					label = bold(yellow(`[${label}]`));
 				} else if (event.level === 'error') {
-					type = bold(red(`[${type}]`));
+					label = bold(red(`[${label}]`));
 				}
 
-				prefix += `${type} `;
+				prefix += `${label} `;
 			}
 			return reset(prefix);
 		}
@@ -87,7 +87,7 @@ export const nodeLogOptions: Required<LogOptions> = {
 };
 
 export interface LogMessage {
-	type: string | null;
+	label: string | null;
 	level: LoggerLevel;
 	message: string;
 }

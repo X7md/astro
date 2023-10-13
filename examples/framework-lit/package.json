@@ -1,5 +1,6 @@
 {
   "name": "@example/framework-lit",
+  "type": "module",
   "version": "0.0.1",
   "private": true,
   "scripts": {
@@ -9,12 +10,10 @@
     "preview": "astro preview",
     "astro": "astro"
   },
-  "devDependencies": {
-    "@astrojs/lit": "^1.0.1",
-    "astro": "^1.1.2"
-  },
   "dependencies": {
-    "@webcomponents/template-shadowroot": "^0.1.0",
-    "lit": "^2.2.5"
+    "@astrojs/lit": "^3.0.1",
+    "@webcomponents/template-shadowroot": "^0.2.1",
+    "astro": "^3.3.0",
+    "lit": "^2.8.0"
   }
 }

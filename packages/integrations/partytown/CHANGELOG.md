@@ -1,5 +1,111 @@
 # @astrojs/partytown
 
+## 2.0.1
+
+### Patch Changes
+
+- [#8737](https://github.com/withastro/astro/pull/8737) [`6f60da805`](https://github.com/withastro/astro/commit/6f60da805e0014bc50dd07bef972e91c73560c3c) Thanks [@ematipico](https://github.com/ematipico)! - Add provenance statement when publishing the library from CI
+
+- [#8740](https://github.com/withastro/astro/pull/8740) [`f277ba8b7`](https://github.com/withastro/astro/commit/f277ba8b703037635bc7adee84d51eaf7dafd388) Thanks [@florian-lefebvre](https://github.com/florian-lefebvre)! - Expose types for TypeScript users
+
+## 2.0.0
+
+### Major Changes
+
+- [#8188](https://github.com/withastro/astro/pull/8188) [`d0679a666`](https://github.com/withastro/astro/commit/d0679a666f37da0fca396d42b9b32bbb25d29312) Thanks [@ematipico](https://github.com/ematipico)! - Remove support for Node 16. The lowest supported version by Astro and all integrations is now v18.14.1. As a reminder, Node 16 will be deprecated on the 11th September 2023.
+
+- [#8179](https://github.com/withastro/astro/pull/8179) [`6011d52d3`](https://github.com/withastro/astro/commit/6011d52d38e43c3e3d52bc3bc41a60e36061b7b7) Thanks [@matthewp](https://github.com/matthewp)! - Astro 3.0 Release Candidate
+
+## 2.0.0-rc.1
+
+### Major Changes
+
+- [#8179](https://github.com/withastro/astro/pull/8179) [`6011d52d3`](https://github.com/withastro/astro/commit/6011d52d38e43c3e3d52bc3bc41a60e36061b7b7) Thanks [@matthewp](https://github.com/matthewp)! - Astro 3.0 Release Candidate
+
+## 2.0.0-beta.0
+
+### Major Changes
+
+- [`1eae2e3f7`](https://github.com/withastro/astro/commit/1eae2e3f7d693c9dfe91c8ccfbe606d32bf2fb81) Thanks [@Princesseuh](https://github.com/Princesseuh)! - Remove support for Node 16. The lowest supported version by Astro and all integrations is now v18.14.1. As a reminder, Node 16 will be deprecated on the 11th September 2023.
+
+## 1.2.3
+
+### Patch Changes
+
+- [#7175](https://github.com/withastro/astro/pull/7175) [`59d8c50b8`](https://github.com/withastro/astro/commit/59d8c50b8426cd6825abc07405041779b7999022) Thanks [@AkashRajpurohit](https://github.com/AkashRajpurohit)! - fix typescript type for partytown options
+
+## 1.2.2
+
+### Patch Changes
+
+- [#7104](https://github.com/withastro/astro/pull/7104) [`826e02890`](https://github.com/withastro/astro/commit/826e0289005f645b902375b98d5549c6a95ccafa) Thanks [@bluwy](https://github.com/bluwy)! - Specify `"files"` field to only publish necessary files
+
+## 1.2.1
+
+### Patch Changes
+
+- [#7001](https://github.com/withastro/astro/pull/7001) [`ad5c75447`](https://github.com/withastro/astro/commit/ad5c75447af9cfbdcb1f288c5c17229fbd3d6dd2) Thanks [@Waxer59](https://github.com/Waxer59)! - Fixed a code example that was wrongly closed
+
+## 1.2.0
+
+### Minor Changes
+
+- [#6667](https://github.com/withastro/astro/pull/6667) [`aff53c109`](https://github.com/withastro/astro/commit/aff53c109c4f7b08b6b80e58e9ca5cb481131eb5) Thanks [@thebinarymutant](https://github.com/thebinarymutant)! - Expose more partytown config properties
+
+## 1.1.1
+
+### Patch Changes
+
+- [#6494](https://github.com/withastro/astro/pull/6494) [`a13e9d7e3`](https://github.com/withastro/astro/commit/a13e9d7e33baccf51e7d4815f99b481ad174bc57) Thanks [@Yan-Thomas](https://github.com/Yan-Thomas)! - Consistency improvements to several package descriptions
+
+## 1.1.0
+
+### Minor Changes
+
+- [#6213](https://github.com/withastro/astro/pull/6213) [`afbbc4d5b`](https://github.com/withastro/astro/commit/afbbc4d5bfafc1779bac00b41c2a1cb1c90f2808) Thanks [@Princesseuh](https://github.com/Princesseuh)! - Updated compilation settings to disable downlevelling for Node 14
+
+## 1.0.3
+
+### Patch Changes
+
+- [#5936](https://github.com/withastro/astro/pull/5936) [`77ae7a597`](https://github.com/withastro/astro/commit/77ae7a597a8fdd5c939291b4f63237c659a79225) Thanks [@rishi-raj-jain](https://github.com/rishi-raj-jain)! - fix trailing slash with base path
+
+- [#5820](https://github.com/withastro/astro/pull/5820) [`813073add`](https://github.com/withastro/astro/commit/813073addd669538d67032a48ef6b649216dafc5) Thanks [@davlet61](https://github.com/davlet61)! - Bumps `@builder.io/partytown` version in partytown integration to fix deprecation warning in pagespeed insights
+
+## 1.0.3-beta.1
+
+<details>
+<summary>See changes in 1.0.3-beta.1</summary>
+
+### Patch Changes
+
+- [#5936](https://github.com/withastro/astro/pull/5936) [`77ae7a597`](https://github.com/withastro/astro/commit/77ae7a597a8fdd5c939291b4f63237c659a79225) Thanks [@rishi-raj-jain](https://github.com/rishi-raj-jain)! - fix trailing slash with base path
+
+</details>
+
+## 1.0.3-beta.0
+
+<details>
+<summary>See changes in 1.0.3-beta.0</summary>
+
+### Patch Changes
+
+- [#5820](https://github.com/withastro/astro/pull/5820) [`813073add`](https://github.com/withastro/astro/commit/813073addd669538d67032a48ef6b649216dafc5) Thanks [@davlet61](https://github.com/davlet61)! - Bumps `@builder.io/partytown` version in partytown integration to fix deprecation warning in pagespeed insights
+
+</details>
+
+## 1.0.2
+
+### Patch Changes
+
+- [#5425](https://github.com/withastro/astro/pull/5425) [`4266869f4`](https://github.com/withastro/astro/commit/4266869f4fef37fadb2e0c4c0b703decde11037a) Thanks [@brenelz](https://github.com/brenelz)! - fix partytown when base path specified
+
+## 1.0.1
+
+### Patch Changes
+
+- [#4989](https://github.com/withastro/astro/pull/4989) [`50a397c4b`](https://github.com/withastro/astro/commit/50a397c4ba61dffaeb1aaf2a4e262ea79cd1580a) Thanks [@that-joao](https://github.com/that-joao)! - Update @builder.io/partytown dependency
+
 ## 1.0.0
 
 ### Major Changes
@@ -72,7 +178,7 @@
 
 ### Minor Changes
 
-- [`e425f896`](https://github.com/withastro/astro/commit/e425f896b668d98033ad3b998b50c1f28bc7f6ee) Thanks [@FredKSchott](https://github.com/FredKSchott)! - Update config options to resepect [RFC0019](https://github.com/withastro/rfcs/blob/main/proposals/0019-config-finalization.md)
+- [`e425f896`](https://github.com/withastro/astro/commit/e425f896b668d98033ad3b998b50c1f28bc7f6ee) Thanks [@FredKSchott](https://github.com/FredKSchott)! - Update config options to respect [RFC0019](https://github.com/withastro/rfcs/blob/main/proposals/0019-config-finalization.md)
 
 ## 0.0.2
 

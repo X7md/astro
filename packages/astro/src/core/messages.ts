@@ -1,4 +1,3 @@
-import boxen from 'boxen';
 import {
 	bgCyan,
 	bgGreen,
@@ -14,12 +13,16 @@ import {
 	underline,
 	yellow,
 } from 'kleur/colors';
-import type { AddressInfo } from 'net';
-import os from 'os';
-import { ZodError } from 'zod';
-import type { AstroConfig } from '../@types/astro';
-import { ErrorWithMetadata } from './errors.js';
-import { emoji, getLocalAddress, padMultilineString } from './util.js';
+import type { ResolvedServerUrls } from 'vite';
+import type { ZodError } from 'zod';
+import { getDocsForError, renderErrorMarkdown } from './errors/dev/utils.js';
+import {
+	AstroError,
+	AstroUserError,
+	CompilerError,
+	type ErrorWithMetadata,
+} from './errors/index.js';
+import { emoji, padMultilineString } from './util.js';
 
 const PREFIX_PADDING = 6;
 
@@ -51,66 +54,49 @@ export function hmr({ file, style = false }: { file: string; style?: boolean }):
 	return `${green('update'.padStart(PREFIX_PADDING))} ${file}${style ? ` ${dim('style')}` : ''}`;
 }
 
-/** Display dev server host and startup time */
-export function devStart({
+/** Display server host and startup time */
+export function serverStart({
 	startupTime,
-	devServerAddressInfo,
-	config,
-	https,
-	site,
+	resolvedUrls,
+	host,
+	base,
+	isRestart = false,
 }: {
 	startupTime: number;
-	devServerAddressInfo: AddressInfo;
-	config: AstroConfig;
-	https: boolean;
-	site: URL | undefined;
+	resolvedUrls: ResolvedServerUrls;
+	host: string | boolean;
+	base: string;
+	isRestart?: boolean;
 }): string {
 	// PACKAGE_VERSION is injected at build-time
 	const version = process.env.PACKAGE_VERSION ?? '0.0.0';
-	const rootPath = site ? site.pathname : '/';
 	const localPrefix = `${dim('┃')} Local    `;
 	const networkPrefix = `${dim('┃')} Network  `;
+	const emptyPrefix = ' '.repeat(11);
 
-	const { address: networkAddress, port } = devServerAddressInfo;
-	const localAddress = getLocalAddress(networkAddress, config.server.host);
-	const networkLogging = getNetworkLogging(config.server.host);
-	const toDisplayUrl = (hostname: string) =>
-		`${https ? 'https' : 'http'}://${hostname}:${port}${rootPath}`;
+	const localUrlMessages = resolvedUrls.local.map((url, i) => {
+		return `${i === 0 ? localPrefix : emptyPrefix}${bold(cyan(new URL(url).origin + base))}`;
+	});
+	const networkUrlMessages = resolvedUrls.network.map((url, i) => {
+		return `${i === 0 ? networkPrefix : emptyPrefix}${bold(cyan(new URL(url).origin + base))}`;
+	});
 
-	let local = `${localPrefix}${bold(cyan(toDisplayUrl(localAddress)))}`;
-	let network = null;
-
-	if (networkLogging === 'host-to-expose') {
-		network = `${networkPrefix}${dim('use --host to expose')}`;
-	} else if (networkLogging === 'visible') {
-		const nodeVersion = Number(process.version.substring(1, process.version.indexOf('.', 5)));
-		const ipv4Networks = Object.values(os.networkInterfaces())
-			.flatMap((networkInterface) => networkInterface ?? [])
-			.filter(
-				(networkInterface) =>
-					networkInterface?.address &&
-					networkInterface?.family === (nodeVersion < 18 || nodeVersion >= 18.4 ? 'IPv4' : 4)
-			);
-		for (let { address } of ipv4Networks) {
-			if (address.includes('127.0.0.1')) {
-				const displayAddress = address.replace('127.0.0.1', localAddress);
-				local = `${localPrefix}${bold(cyan(toDisplayUrl(displayAddress)))}`;
-			} else {
-				network = `${networkPrefix}${bold(cyan(toDisplayUrl(address)))}`;
-			}
-		}
-		if (!network) {
-			network = `${networkPrefix}${dim('unable to find network to expose')}`;
+	if (networkUrlMessages.length === 0) {
+		const networkLogging = getNetworkLogging(host);
+		if (networkLogging === 'host-to-expose') {
+			networkUrlMessages.push(`${networkPrefix}${dim('use --host to expose')}`);
+		} else if (networkLogging === 'visible') {
+			networkUrlMessages.push(`${networkPrefix}${dim('unable to find network to expose')}`);
 		}
 	}
 
 	const messages = [
 		`${emoji('🚀 ', '')}${bgGreen(black(` astro `))} ${green(`v${version}`)} ${dim(
-			`started in ${Math.round(startupTime)}ms`
+			`${isRestart ? 're' : ''}started in ${Math.round(startupTime)}ms`
 		)}`,
 		'',
-		local,
-		network,
+		...localUrlMessages,
+		...networkUrlMessages,
 		'',
 	];
 	return messages
@@ -119,35 +105,30 @@ export function devStart({
 		.join('\n');
 }
 
-export function telemetryNotice() {
-	const headline = yellow(`Astro now collects ${bold('anonymous')} usage data.`);
-	const why = `This ${bold('optional program')} will help shape our roadmap.`;
-	const more = `For more info, visit ${underline('https://astro.build/telemetry')}`;
-	const box = boxen([headline, why, '', more].join('\n'), {
-		margin: 0,
-		padding: 1,
-		borderStyle: 'round',
-		borderColor: 'yellow',
-	});
-	return box;
+export function telemetryNotice(packageManager = 'npm') {
+	const headline = `${cyan('◆')} Astro collects completely anonymous usage data.`;
+	const why = dim('  This optional program helps shape our roadmap.');
+	const disable = dim(`  Run \`${packageManager} run astro telemetry disable\` to opt-out.`);
+	const details = `  Details: ${underline('https://astro.build/telemetry')}`;
+	return [headline, why, disable, details].map((v) => '  ' + v).join('\n');
 }
 
 export function telemetryEnabled() {
-	return `\n  ${green('◉')} Anonymous telemetry is ${bgGreen(
-		black(' enabled ')
-	)}. Thank you for improving Astro!\n`;
+	return `${green('◉')} Anonymous telemetry is now ${bgGreen(black(' enabled '))}\n  ${dim(
+		'Thank you for improving Astro!'
+	)}\n`;
 }
 
 export function telemetryDisabled() {
-	return `\n  ${yellow('◯')}  Anonymous telemetry is ${bgYellow(
-		black(' disabled ')
-	)}. We won't share any usage data.\n`;
+	return `${yellow('◯')} Anonymous telemetry is now ${bgYellow(black(' disabled '))}\n  ${dim(
+		"We won't ever record your usage data."
+	)}\n`;
 }
 
 export function telemetryReset() {
-	return `\n  ${cyan('◆')} Anonymous telemetry has been ${bgCyan(
-		black(' reset ')
-	)}. You may be prompted again.\n`;
+	return `${cyan('◆')} Anonymous telemetry has been ${bgCyan(black(' reset '))}\n  ${dim(
+		'You may be prompted again.'
+	)}\n`;
 }
 
 export function fsStrictWarning() {
@@ -194,11 +175,6 @@ export function cancelled(message: string, tip?: string) {
 		.join('\n');
 }
 
-/** Display port in use */
-export function portInUse({ port }: { port: number }): string {
-	return `Port ${port} in use. Trying a new one…`;
-}
-
 const LOCAL_IP_HOSTS = new Set(['localhost', '127.0.0.1']);
 
 export function getNetworkLogging(host: string | boolean): 'none' | 'host-to-expose' | 'visible' {
@@ -221,24 +197,54 @@ export function formatConfigErrorMessage(err: ZodError) {
 }
 
 export function formatErrorMessage(err: ErrorWithMetadata, args: string[] = []): string {
-	args.push(`${bgRed(black(` error `))}${red(bold(padMultilineString(err.message)))}`);
+	const isOurError = AstroError.is(err) || CompilerError.is(err) || AstroUserError.is(err);
+
+	args.push(
+		`${bgRed(black(` error `))}${red(
+			padMultilineString(isOurError ? renderErrorMarkdown(err.message, 'cli') : err.message)
+		)}`
+	);
 	if (err.hint) {
 		args.push(`  ${bold('Hint:')}`);
-		args.push(yellow(padMultilineString(err.hint, 4)));
+		args.push(
+			yellow(padMultilineString(isOurError ? renderErrorMarkdown(err.hint, 'cli') : err.hint, 4))
+		);
 	}
-	if (err.id) {
+	const docsLink = getDocsForError(err);
+	if (docsLink) {
+		args.push(`  ${bold('Error reference:')}`);
+		args.push(`    ${underline(docsLink)}`);
+	}
+	if (err.id || err.loc?.file) {
 		args.push(`  ${bold('File:')}`);
-		args.push(red(`    ${err.id}`));
+		args.push(
+			red(
+				`    ${err.id ?? err.loc?.file}${
+					err.loc?.line && err.loc.column ? `:${err.loc.line}:${err.loc.column}` : ''
+				}`
+			)
+		);
 	}
 	if (err.frame) {
 		args.push(`  ${bold('Code:')}`);
-		args.push(red(padMultilineString(err.frame, 4)));
+		args.push(red(padMultilineString(err.frame.trim(), 4)));
 	}
 	if (args.length === 1 && err.stack) {
 		args.push(dim(err.stack));
 	} else if (err.stack) {
 		args.push(`  ${bold('Stacktrace:')}`);
 		args.push(dim(err.stack));
+		args.push(``);
+	}
+
+	if (err.cause) {
+		args.push(`  ${bold('Cause:')}`);
+		if (err.cause instanceof Error) {
+			args.push(dim(err.cause.stack ?? err.cause.toString()));
+		} else {
+			args.push(JSON.stringify(err.cause));
+		}
+
 		args.push(``);
 	}
 	return args.join('\n');

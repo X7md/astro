@@ -1,11 +1,16 @@
 ---
 title: 'Markdown + Tailwind'
 layout: ../layouts/main.astro
-setup: |
-  import Button from '../components/Button.astro';
 ---
 
 <div class="grid place-items-center h-screen content-center">
-    <Button>Tailwind Button in Markdown!</Button>
-    <a href="/" class="p-4 underline">Go home...</a>
+ <div class="py-2 px-4 bg-purple-500 text-white font-semibold rounded-lg shadow-md">
+  Tailwind classes also work in Markdown!
+ </div>
+ <a
+  href="/"
+  class="p-4 underline hover:text-purple-500 transition-colors ease-in-out duration-200"
+ >
+  Go home
+ </a>
 </div>

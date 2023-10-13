@@ -28,16 +28,14 @@ The `astro add` command-line tool automates the installation for you. Run one of
 
 ```sh
 # Using NPM
-npm run astro add preact
+npx astro add preact
 # Using Yarn
 yarn astro add preact
 # Using PNPM
 pnpm astro add preact
 ```
 
-Then, restart the dev server by typing `CTRL-C` and then `npm run astro dev` in the terminal window that was running Astro.
-
-Because this command is new, it might not properly set things up. If that happens, [feel free to log an issue on our GitHub](https://github.com/withastro/astro/issues) and try the manual installation steps below.
+If you run into any issues, [feel free to report them to us on GitHub](https://github.com/withastro/astro/issues) and try the manual installation steps below.
 
 ### Manual Install
 
@@ -55,26 +53,25 @@ npm install preact
 
 Then, apply this integration to your `astro.config.*` file using the `integrations` property:
 
-__`astro.config.mjs`__
-
-```js
+```diff lang="js" "preact()"
+// astro.config.mjs
 import { defineConfig } from 'astro/config';
-import preact from '@astrojs/preact';
++ import preact from '@astrojs/preact';
 
 export default defineConfig({
   // ...
   integrations: [preact()],
+  //             ^^^^^^^^
 });
 ```
-
-Finally, restart the dev server.
 
 ## Usage
 
 To use your first Preact component in Astro, head to our [UI framework documentation][astro-ui-frameworks]. You'll explore:
+
 - 📦 how framework components are loaded,
 - 💧 client-side hydration options, and
-- 🪆 opportunities to mix and nest frameworks together
+- 🤝 opportunities to mix and nest frameworks together
 
 Also check our [Astro Integration Documentation][astro-integration] for more on integrations.
 
@@ -90,15 +87,14 @@ You can enable `preact/compat`, Preact’s compatibility layer for rendering Rea
 
 To do so, pass an object to the Preact integration and set `compat: true`.
 
-```js
+```js "compat: true"
 // astro.config.mjs
 import { defineConfig } from 'astro/config';
 import preact from '@astrojs/preact';
 
 export default defineConfig({
-  integrations: [
-    preact({ compat: true })
-  ],
+  integrations: [preact({ compat: true })],
+  //                      ^^^^^^^^^^^^
 });
 ```
 
@@ -106,8 +102,7 @@ With the `compat` option enabled, the Preact integration will render React compo
 
 When importing React component libraries, in order to swap out the `react` and `react-dom` dependencies as `preact/compat`, you can use [`overrides`](https://docs.npmjs.com/cli/v8/configuring-npm/package-json#overrides) to do so.
 
-```js
-// package.json
+```json title="package.json"
 {
   "overrides": {
     "react": "npm:@preact/compat@latest",
@@ -121,6 +116,41 @@ Check out the [`pnpm` overrides](https://pnpm.io/package_json#pnpmoverrides) and
 > **Note**
 > Currently, the `compat` option only works for React libraries that export code as ESM. If an error happens during build-time, try adding the library to `vite.ssr.noExternal: ['the-react-library']` in your `astro.config.mjs` file.
 
+## Options
+
+### Combining multiple JSX frameworks
+
+When you are using multiple JSX frameworks (React, Preact, Solid) in the same project, Astro needs to determine which JSX framework-specific transformations should be used for each of your components. If you have only added one JSX framework integration to your project, no extra configuration is needed.
+
+Use the `include` (required) and `exclude` (optional) configuration options to specify which files belong to which framework. Provide an array of files and/or folders to `include` for each framework you are using. Wildcards may be used to include multiple file paths.
+
+We recommend placing common framework components in the same folder (e.g. `/components/react/` and `/components/solid/`) to make specifying your includes easier, but this is not required:
+
+```js
+// astro.config.mjs
+import { defineConfig } from 'astro/config';
+import preact from '@astrojs/preact';
+import react from '@astrojs/react';
+import svelte from '@astrojs/svelte';
+import vue from '@astrojs/vue';
+import solid from '@astrojs/solid-js';
+
+export default defineConfig({
+  // Enable many frameworks to support all different kinds of components.
+  // No `include` is needed if you are only using a single JSX framework!
+  integrations: [
+    preact({
+      include: ['**/preact/*'],
+    }),
+    react({
+      include: ['**/react/*'],
+    }),
+    solid({
+      include: ['**/solid/*'],
+    }),
+  ],
+});
+```
 
 ## Examples
 
@@ -129,7 +159,7 @@ Check out the [`pnpm` overrides](https://pnpm.io/package_json#pnpmoverrides) and
 
 ## Troubleshooting
 
-For help, check out the `#support-threads` channel on [Discord](https://astro.build/chat). Our friendly Support Squad members are here to help!
+For help, check out the `#support` channel on [Discord](https://astro.build/chat). Our friendly Support Squad members are here to help!
 
 You can also check our [Astro Integration Documentation][astro-integration] for more on integrations.
 

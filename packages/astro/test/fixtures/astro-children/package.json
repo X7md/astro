@@ -6,6 +6,9 @@
     "@astrojs/preact": "workspace:*",
     "@astrojs/svelte": "workspace:*",
     "@astrojs/vue": "workspace:*",
-    "astro": "workspace:*"
+    "astro": "workspace:*",
+    "preact": "^10.17.1",
+    "svelte": "^4.2.0",
+    "vue": "^3.3.4"
   }
 }

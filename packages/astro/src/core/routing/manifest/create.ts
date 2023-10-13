@@ -1,19 +1,20 @@
 import type {
 	AstroConfig,
+	AstroSettings,
 	InjectedRoute,
 	ManifestData,
 	RouteData,
 	RoutePart,
-} from '../../../@types/astro';
-import type { LogOptions } from '../../logger/core';
+} from '../../../@types/astro.js';
+import type { Logger } from '../../logger/core.js';
 
-import fs from 'fs';
 import { createRequire } from 'module';
-import path from 'path';
-import slash from 'slash';
-import { fileURLToPath } from 'url';
-import { warn } from '../../logger/core.js';
-import { removeLeadingForwardSlash } from '../../path.js';
+import nodeFs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { getPrerenderDefault } from '../../../prerender/utils.js';
+import { SUPPORTED_MARKDOWN_FILE_EXTENSIONS } from '../../constants.js';
+import { removeLeadingForwardSlash, slash } from '../../path.js';
 import { resolvePages } from '../../util.js';
 import { getRouteGenerator } from './generator.js';
 const require = createRequire(import.meta.url);
@@ -31,8 +32,8 @@ interface Item {
 
 function countOccurrences(needle: string, haystack: string) {
 	let count = 0;
-	for (let i = 0; i < haystack.length; i += 1) {
-		if (haystack[i] === needle) count += 1;
+	for (const hay of haystack) {
+		if (hay === needle) count += 1;
 	}
 	return count;
 }
@@ -59,32 +60,47 @@ function getParts(part: string, file: string) {
 	return result;
 }
 
-function getPattern(segments: RoutePart[][], addTrailingSlash: AstroConfig['trailingSlash']) {
+function getPattern(
+	segments: RoutePart[][],
+	base: string,
+	addTrailingSlash: AstroConfig['trailingSlash']
+) {
 	const pathname = segments
 		.map((segment) => {
-			return segment[0].spread
-				? '(?:\\/(.*?))?'
-				: '\\/' +
-						segment
-							.map((part) => {
-								if (part)
-									return part.dynamic
-										? '([^/]+?)'
-										: part.content
-												.normalize()
-												.replace(/\?/g, '%3F')
-												.replace(/#/g, '%23')
-												.replace(/%5B/g, '[')
-												.replace(/%5D/g, ']')
-												.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-							})
-							.join('');
+			if (segment.length === 1 && segment[0].spread) {
+				return '(?:\\/(.*?))?';
+			} else {
+				return (
+					'\\/' +
+					segment
+						.map((part) => {
+							if (part.spread) {
+								return '(.*?)';
+							} else if (part.dynamic) {
+								return '([^/]+?)';
+							} else {
+								return part.content
+									.normalize()
+									.replace(/\?/g, '%3F')
+									.replace(/#/g, '%23')
+									.replace(/%5B/g, '[')
+									.replace(/%5D/g, ']')
+									.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+							}
+						})
+						.join('')
+				);
+			}
 		})
 		.join('');
 
 	const trailing =
 		addTrailingSlash && segments.length ? getTrailingSlashPattern(addTrailingSlash) : '$';
-	return new RegExp(`^${pathname || '\\/'}${trailing}`);
+	let initial = '\\/';
+	if (addTrailingSlash === 'never' && base !== '/') {
+		initial = '';
+	}
+	return new RegExp(`^${pathname || initial}${trailing}`);
 }
 
 function getTrailingSlashPattern(addTrailingSlash: AstroConfig['trailingSlash']): string {
@@ -105,18 +121,16 @@ function isSpread(str: string) {
 function validateSegment(segment: string, file = '') {
 	if (!file) file = segment;
 
-	if (/^\$/.test(segment)) {
-		throw new Error(
-			`Invalid route ${file} \u2014 Astro's Collections API has been replaced by dynamic route params.`
-		);
-	}
 	if (/\]\[/.test(segment)) {
 		throw new Error(`Invalid route ${file} \u2014 parameters must be separated`);
 	}
 	if (countOccurrences('[', segment) !== countOccurrences(']', segment)) {
 		throw new Error(`Invalid route ${file} \u2014 brackets are unbalanced`);
 	}
-	if (/.+\[\.\.\.[^\]]+\]/.test(segment) || /\[\.\.\.[^\]]+\].+/.test(segment)) {
+	if (
+		(/.+\[\.\.\.[^\]]+\]/.test(segment) || /\[\.\.\.[^\]]+\].+/.test(segment)) &&
+		file.endsWith('.astro')
+	) {
 		throw new Error(`Invalid route ${file} \u2014 rest parameter must be a standalone segment`);
 	}
 }
@@ -157,6 +171,7 @@ function comparator(a: Item, b: Item) {
 		}
 	}
 
+	// endpoints are prioritized over pages
 	if (a.isPage !== b.isPage) {
 		return a.isPage ? 1 : -1;
 	}
@@ -169,7 +184,12 @@ function injectedRouteToItem(
 	{ config, cwd }: { config: AstroConfig; cwd?: string },
 	{ pattern, entryPoint }: InjectedRoute
 ): Item {
-	const resolved = require.resolve(entryPoint, { paths: [cwd || fileURLToPath(config.root)] });
+	let resolved: string;
+	try {
+		resolved = require.resolve(entryPoint, { paths: [cwd || fileURLToPath(config.root)] });
+	} catch (e) {
+		resolved = fileURLToPath(new URL(entryPoint, config.root));
+	}
 
 	const ext = path.extname(pattern);
 
@@ -188,25 +208,43 @@ function injectedRouteToItem(
 	};
 }
 
+export interface CreateRouteManifestParams {
+	/** Astro Settings object */
+	settings: AstroSettings;
+	/** Current working directory */
+	cwd?: string;
+	/** fs module, for testing */
+	fsMod?: typeof nodeFs;
+}
+
 /** Create manifest of all static routes */
 export function createRouteManifest(
-	{ config, cwd }: { config: AstroConfig; cwd?: string },
-	logging: LogOptions
+	{ settings, cwd, fsMod }: CreateRouteManifestParams,
+	logger: Logger
 ): ManifestData {
 	const components: string[] = [];
 	const routes: RouteData[] = [];
-	const validPageExtensions: Set<string> = new Set([
+	const validPageExtensions = new Set<string>([
 		'.astro',
-		'.md',
-		...config._ctx.pageExtensions,
+		...SUPPORTED_MARKDOWN_FILE_EXTENSIONS,
+		...settings.pageExtensions,
 	]);
-	const validEndpointExtensions: Set<string> = new Set(['.js', '.ts']);
+	const validEndpointExtensions = new Set<string>(['.js', '.ts']);
+	const localFs = fsMod ?? nodeFs;
+	const prerender = getPrerenderDefault(settings.config);
 
-	function walk(dir: string, parentSegments: RoutePart[][], parentParams: string[]) {
+	const foundInvalidFileExtensions = new Set<string>();
+
+	function walk(
+		fs: typeof nodeFs,
+		dir: string,
+		parentSegments: RoutePart[][],
+		parentParams: string[]
+	) {
 		let items: Item[] = [];
 		fs.readdirSync(dir).forEach((basename) => {
 			const resolved = path.join(dir, basename);
-			const file = slash(path.relative(cwd || fileURLToPath(config.root), resolved));
+			const file = slash(path.relative(cwd || fileURLToPath(settings.config.root), resolved));
 			const isDir = fs.statSync(resolved).isDirectory();
 
 			const ext = path.extname(basename);
@@ -220,6 +258,11 @@ export function createRouteManifest(
 			}
 			// filter out "foo.astro_tmp" files, etc
 			if (!isDir && !validPageExtensions.has(ext) && !validEndpointExtensions.has(ext)) {
+				if (!foundInvalidFileExtensions.has(ext)) {
+					foundInvalidFileExtensions.add(ext);
+					logger.warn('astro', `Invalid file extension for Pages: ${ext}`);
+				}
+
 				return;
 			}
 			const segment = isDir ? basename : name;
@@ -279,12 +322,12 @@ export function createRouteManifest(
 			params.push(...item.parts.filter((p) => p.dynamic).map((p) => p.content));
 
 			if (item.isDir) {
-				walk(path.join(dir, item.basename), segments, params);
+				walk(fsMod ?? fs, path.join(dir, item.basename), segments, params);
 			} else {
 				components.push(item.file);
 				const component = item.file;
-				const trailingSlash = item.isPage ? config.trailingSlash : 'never';
-				const pattern = getPattern(segments, trailingSlash);
+				const trailingSlash = item.isPage ? settings.config.trailingSlash : 'never';
+				const pattern = getPattern(segments, settings.config.base, trailingSlash);
 				const generate = getRouteGenerator(segments, trailingSlash);
 				const pathname = segments.every((segment) => segment.length === 1 && !segment[0].dynamic)
 					? `/${segments.map((segment) => segment[0].content).join('/')}`
@@ -292,7 +335,6 @@ export function createRouteManifest(
 				const route = `/${segments
 					.map(([{ dynamic, content }]) => (dynamic ? `[${content}]` : content))
 					.join('/')}`.toLowerCase();
-
 				routes.push({
 					route,
 					type: item.isPage ? 'page' : 'endpoint',
@@ -302,56 +344,51 @@ export function createRouteManifest(
 					component,
 					generate,
 					pathname: pathname || undefined,
+					prerender,
 				});
 			}
 		});
 	}
 
+	const { config } = settings;
 	const pages = resolvePages(config);
 
-	if (fs.existsSync(pages)) {
-		walk(fileURLToPath(pages), [], []);
-	} else if (config?._ctx?.injectedRoutes?.length === 0) {
-		const pagesDirRootRelative = pages.href.slice(config.root.href.length);
+	if (localFs.existsSync(pages)) {
+		walk(localFs, fileURLToPath(pages), [], []);
+	} else if (settings.injectedRoutes.length === 0) {
+		const pagesDirRootRelative = pages.href.slice(settings.config.root.href.length);
 
-		warn(logging, 'astro', `Missing pages directory: ${pagesDirRootRelative}`);
+		logger.warn('astro', `Missing pages directory: ${pagesDirRootRelative}`);
 	}
 
-	config?._ctx?.injectedRoutes
+	settings.injectedRoutes
 		?.sort((a, b) =>
 			// sort injected routes in the same way as user-defined routes
 			comparator(injectedRouteToItem({ config, cwd }, a), injectedRouteToItem({ config, cwd }, b))
 		)
 		.reverse() // prepend to the routes array from lowest to highest priority
-		.forEach(({ pattern: name, entryPoint }) => {
-			const resolved = require.resolve(entryPoint, { paths: [cwd || fileURLToPath(config.root)] });
+		.forEach(({ pattern: name, entryPoint, prerender: prerenderInjected }) => {
+			let resolved: string;
+			try {
+				resolved = require.resolve(entryPoint, { paths: [cwd || fileURLToPath(config.root)] });
+			} catch (e) {
+				resolved = fileURLToPath(new URL(entryPoint, config.root));
+			}
 			const component = slash(path.relative(cwd || fileURLToPath(config.root), resolved));
 
-			const isDynamic = (str: string) => str?.[0] === '[';
-			const normalize = (str: string) => str?.substring(1, str?.length - 1);
-
 			const segments = removeLeadingForwardSlash(name)
-				.split(path.sep)
+				.split(path.posix.sep)
 				.filter(Boolean)
 				.map((s: string) => {
 					validateSegment(s);
-
-					const dynamic = isDynamic(s);
-					const content = dynamic ? normalize(s) : s;
-					return [
-						{
-							content,
-							dynamic,
-							spread: isSpread(s),
-						},
-					];
+					return getParts(s, component);
 				});
 
 			const type = resolved.endsWith('.astro') ? 'page' : 'endpoint';
 			const isPage = type === 'page';
 			const trailingSlash = isPage ? config.trailingSlash : 'never';
 
-			const pattern = getPattern(segments, trailingSlash);
+			const pattern = getPattern(segments, settings.config.base, trailingSlash);
 			const generate = getRouteGenerator(segments, trailingSlash);
 			const pathname = segments.every((segment) => segment.length === 1 && !segment[0].dynamic)
 				? `/${segments.map((segment) => segment[0].content).join('/')}`
@@ -383,8 +420,72 @@ export function createRouteManifest(
 				component,
 				generate,
 				pathname: pathname || void 0,
+				prerender: prerenderInjected ?? prerender,
 			});
 		});
+
+	Object.entries(settings.config.redirects).forEach(([from, to]) => {
+		const trailingSlash = config.trailingSlash;
+
+		const segments = removeLeadingForwardSlash(from)
+			.split(path.posix.sep)
+			.filter(Boolean)
+			.map((s: string) => {
+				validateSegment(s);
+				return getParts(s, from);
+			});
+
+		const pattern = getPattern(segments, settings.config.base, trailingSlash);
+		const generate = getRouteGenerator(segments, trailingSlash);
+		const pathname = segments.every((segment) => segment.length === 1 && !segment[0].dynamic)
+			? `/${segments.map((segment) => segment[0].content).join('/')}`
+			: null;
+		const params = segments
+			.flat()
+			.filter((p) => p.dynamic)
+			.map((p) => p.content);
+		const route = `/${segments
+			.map(([{ dynamic, content }]) => (dynamic ? `[${content}]` : content))
+			.join('/')}`.toLowerCase();
+
+		const routeData: RouteData = {
+			type: 'redirect',
+			route,
+			pattern,
+			segments,
+			params,
+			component: from,
+			generate,
+			pathname: pathname || void 0,
+			prerender: false,
+			redirect: to,
+			redirectRoute: routes.find((r) => r.route === to),
+		};
+
+		const lastSegmentIsDynamic = (r: RouteData) => !!r.segments.at(-1)?.at(-1)?.dynamic;
+
+		const redirBase = path.posix.dirname(route);
+		const dynamicRedir = lastSegmentIsDynamic(routeData);
+		let i = 0;
+		for (const existingRoute of routes) {
+			// An exact match, prefer the page/endpoint. This matches hosts.
+			if (existingRoute.route === route) {
+				routes.splice(i + 1, 0, routeData);
+				return;
+			}
+
+			// If the existing route is dynamic, prefer the static redirect.
+			const base = path.posix.dirname(existingRoute.route);
+			if (base === redirBase && !dynamicRedir && lastSegmentIsDynamic(existingRoute)) {
+				routes.splice(i, 0, routeData);
+				return;
+			}
+			i++;
+		}
+
+		// Didn't find a good place, insert last
+		routes.push(routeData);
+	});
 
 	return {
 		routes,

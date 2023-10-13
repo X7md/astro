@@ -1,32 +1,24 @@
-import { Plugin as VitePlugin } from 'vite';
-import { AstroConfig } from '../@types/astro.js';
+import MagicString from 'magic-string';
+import { normalizePath, type Plugin as VitePlugin } from 'vite';
+import type { AstroSettings } from '../@types/astro.js';
+import { isPage } from '../core/util.js';
 import { PAGE_SSR_SCRIPT_ID } from './index.js';
 
-import ancestor from 'common-ancestor-path';
-import MagicString from 'magic-string';
-import { isPage } from '../core/util.js';
-
-export default function astroScriptsPostPlugin({ config }: { config: AstroConfig }): VitePlugin {
-	function normalizeFilename(filename: string) {
-		if (filename.startsWith('/@fs')) {
-			filename = filename.slice('/@fs'.length);
-		} else if (filename.startsWith('/') && !ancestor(filename, config.root.pathname)) {
-			filename = new URL('.' + filename, config.root).pathname;
-		}
-		return filename;
-	}
-
+export default function astroScriptsPostPlugin({
+	settings,
+}: {
+	settings: AstroSettings;
+}): VitePlugin {
 	return {
 		name: 'astro:scripts:page-ssr',
 		enforce: 'post',
-
 		transform(this, code, id, options) {
 			if (!options?.ssr) return;
 
-			const hasInjectedScript = config._ctx.scripts.some((s) => s.stage === 'page-ssr');
+			const hasInjectedScript = settings.scripts.some((s) => s.stage === 'page-ssr');
 			if (!hasInjectedScript) return;
 
-			const filename = normalizeFilename(id);
+			const filename = normalizePath(id);
 			let fileURL: URL;
 			try {
 				fileURL = new URL(`file://${filename}`);
@@ -35,7 +27,7 @@ export default function astroScriptsPostPlugin({ config }: { config: AstroConfig
 				return;
 			}
 
-			const fileIsPage = isPage(fileURL, config);
+			const fileIsPage = isPage(fileURL, settings);
 			if (!fileIsPage) return;
 
 			const s = new MagicString(code, { filename });
@@ -43,7 +35,7 @@ export default function astroScriptsPostPlugin({ config }: { config: AstroConfig
 
 			return {
 				code: s.toString(),
-				map: s.generateMap(),
+				map: s.generateMap({ hires: 'boundary' }),
 			};
 		},
 	};

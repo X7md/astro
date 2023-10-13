@@ -11,7 +11,22 @@ describe('Dynamic pages in SSR', () => {
 		fixture = await loadFixture({
 			root: './fixtures/ssr-dynamic/',
 			output: 'server',
+			integrations: [
+				{
+					name: 'inject-routes',
+					hooks: {
+						'astro:config:setup': ({ injectRoute }) => {
+							injectRoute({
+								pattern: '/path-alias/[id]',
+								entryPoint: './src/pages/api/products/[id].js',
+							});
+						},
+					},
+				},
+			],
 			adapter: testAdapter(),
+			// test suite was authored when inlineStylesheets defaulted to never
+			build: { inlineStylesheets: 'never' },
 		});
 		await fixture.build();
 	});
@@ -52,6 +67,11 @@ describe('Dynamic pages in SSR', () => {
 
 	it('Dynamic API routes work', async () => {
 		const json = await fetchJSON('/api/products/33');
+		expect(json.id).to.equal('33');
+	});
+
+	it('Injected route work', async () => {
+		const json = await fetchJSON('/path-alias/33');
 		expect(json.id).to.equal('33');
 	});
 

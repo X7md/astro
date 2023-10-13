@@ -1,6 +1,7 @@
 name: Main Checks
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -16,22 +17,12 @@ concurrency:
 jobs:
   congrats:
     name: congratsbot
-    if: ${{ github.repository_owner == 'withastro' }}
-    runs-on: ubuntu-latest
-    steps:
-      - id: setup
-        env:
-          MESSAGE: ${{ github.event.commits[0].message }}
-        run:  |
-              TRIMMED=$(echo "$MESSAGE" | sed '1!d;q')
-              echo "::set-output name=COMMIT_MSG::${TRIMMED}"
-      - name: Send a Discord notification when a PR is merged
-        env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_CONGRATS }}
-          # DISCORD_AVATAR: ${{ github.event.pull_request.user.avatar_url }}
-        uses: Ilshidur/action-discord@0.3.2
-        with:
-          args: "**Merged!** ${{ github.event.commits[0].author.name }}: [`${{ steps.setup.outputs.COMMIT_MSG }}`](<https://github.com/withastro/astro/commit/${{ github.event.commits[0].id }}>)"
+    if: ${{ github.repository_owner == 'withastro' && github.event.head_commit.message != '[ci] format' }}
+    uses: withastro/automation/.github/workflows/congratsbot.yml@main
+    with:
+      EMOJIS: '🎉,🎊,🧑‍🚀,🥳,🙌,🚀,👏,<:houston_golden:1068575433647456447>,<:astrocoin:894990669515489301>,<:astro_pride:1130501345326157854>'
+    secrets:
+      DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_CONGRATS }}
 
   check_for_update:
     name: Check for Updates
@@ -42,13 +33,13 @@ jobs:
       - uses: actions/checkout@v3
 
       - name: Setup PNPM
-        uses: pnpm/action-setup@v2.2.1
+        uses: pnpm/action-setup@v2
 
       - name: Setup Node
         uses: actions/setup-node@v3
         with:
-          node-version: 16
-          cache: 'pnpm'
+          node-version: 18
+          cache: "pnpm"
 
       - name: Install dependencies
         run: pnpm install

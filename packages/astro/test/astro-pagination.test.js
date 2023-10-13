@@ -44,9 +44,25 @@ describe('Pagination', () => {
 			params.map(async ({ color, p }) => {
 				const html = await fixture.readFile(`/posts/${color}/${p}/index.html`);
 				const $ = cheerio.load(html);
-				expect($('#page-a').text()).to.equal(p);
-				expect($('#page-b').text()).to.equal(p);
+				expect($('#page-param').text()).to.equal(p);
+				expect($('#currentPage').text()).to.equal(p);
 				expect($('#filter').text()).to.equal(color);
+
+				const prevHref = $('#prev').attr('href');
+				const nextHref = $('#next').attr('href');
+
+				if (color === 'red') {
+					expect(prevHref).to.be.undefined;
+					expect(nextHref).to.be.undefined;
+				}
+				if (color === 'blue' && p === '1') {
+					expect(prevHref).to.be.undefined;
+					expect(nextHref).to.equal('/posts/blue/2');
+				}
+				if (color === 'blue' && p === '2') {
+					expect(prevHref).to.equal('/posts/blue/1');
+					expect(nextHref).to.be.undefined;
+				}
 			})
 		);
 	});

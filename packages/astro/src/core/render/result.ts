@@ -1,48 +1,49 @@
-import type { MarkdownRenderingOptions } from '@astrojs/markdown-remark';
-import { bold } from 'kleur/colors';
 import type {
 	AstroGlobal,
 	AstroGlobalPartial,
 	Params,
-	Props,
-	RuntimeMode,
 	SSRElement,
 	SSRLoadedRenderer,
 	SSRResult,
-} from '../../@types/astro';
-import { renderSlot } from '../../runtime/server/index.js';
-import { LogOptions, warn } from '../logger/core.js';
-import { isScriptRequest } from './script.js';
-import { isCSSRequest } from './util.js';
+} from '../../@types/astro.js';
+import { renderSlotToString, type ComponentSlots } from '../../runtime/server/index.js';
+import { renderJSX } from '../../runtime/server/jsx.js';
+import { chunkToString } from '../../runtime/server/render/index.js';
+import { AstroCookies } from '../cookies/index.js';
+import { AstroError, AstroErrorData } from '../errors/index.js';
+import type { Logger } from '../logger/core.js';
 
 const clientAddressSymbol = Symbol.for('astro.clientAddress');
-
-function onlyAvailableInSSR(name: string) {
-	return function _onlyAvailableInSSR() {
-		// TODO add more guidance when we have docs and adapters.
-		throw new Error(`Oops, you are trying to use ${name}, which is only available with SSR.`);
-	};
-}
+const responseSentSymbol = Symbol.for('astro.responseSent');
 
 export interface CreateResultArgs {
+	/**
+	 * Used to provide better error messages for `Astro.clientAddress`
+	 */
 	adapterName: string | undefined;
+	/**
+	 * Value of Astro config's `output` option, true if "server" or "hybrid"
+	 */
 	ssr: boolean;
-	streaming: boolean;
-	logging: LogOptions;
-	origin: string;
-	markdown: MarkdownRenderingOptions;
-	mode: RuntimeMode;
+	logger: Logger;
 	params: Params;
 	pathname: string;
-	props: Props;
 	renderers: SSRLoadedRenderer[];
+	clientDirectives: Map<string, string>;
+	compressHTML: boolean;
 	resolve: (s: string) => Promise<string>;
+	/**
+	 * Used for `Astro.site`
+	 */
 	site: string | undefined;
 	links?: Set<SSRElement>;
 	scripts?: Set<SSRElement>;
 	styles?: Set<SSRElement>;
+	componentMetadata?: SSRResult['componentMetadata'];
 	request: Request;
 	status: number;
+	locals: App.Locals;
+	cookies?: AstroCookies;
 }
 
 function getFunctionExpression(slot: any) {
@@ -52,22 +53,22 @@ function getFunctionExpression(slot: any) {
 }
 
 class Slots {
-	#cache = new Map<string, string>();
 	#result: SSRResult;
-	#slots: Record<string, any> | null;
-	#loggingOpts: LogOptions;
+	#slots: ComponentSlots | null;
+	#logger: Logger;
 
-	constructor(result: SSRResult, slots: Record<string, any> | null, logging: LogOptions) {
+	constructor(result: SSRResult, slots: ComponentSlots | null, logger: Logger) {
 		this.#result = result;
 		this.#slots = slots;
-		this.#loggingOpts = logging;
+		this.#logger = logger;
 
 		if (slots) {
 			for (const key of Object.keys(slots)) {
 				if ((this as any)[key] !== undefined) {
-					throw new Error(
-						`Unable to create a slot named "${key}". "${key}" is a reserved slot name!\nPlease update the name of this slot.`
-					);
+					throw new AstroError({
+						...AstroErrorData.ReservedSlotName,
+						message: AstroErrorData.ReservedSlotName.message(key),
+					});
 				}
 				Object.defineProperty(this, key, {
 					get() {
@@ -85,53 +86,48 @@ class Slots {
 	}
 
 	public async render(name: string, args: any[] = []) {
-		const cacheable = args.length === 0;
-		if (!this.#slots) return undefined;
-		if (cacheable && this.#cache.has(name)) {
-			const result = this.#cache.get(name);
-			return result;
-		}
-		if (!this.has(name)) return undefined;
-		if (!cacheable) {
-			const component = await this.#slots[name]();
-			const expression = getFunctionExpression(component);
+		if (!this.#slots || !this.has(name)) return;
 
-			if (!Array.isArray(args)) {
-				warn(
-					this.#loggingOpts,
-					'Astro.slots.render',
-					`Expected second parameter to be an array, received a ${typeof args}. If you're trying to pass an array as a single argument and getting unexpected results, make sure you're passing your array as a item of an array. Ex: Astro.slots.render('default', [["Hello", "World"]])`
+		const result = this.#result;
+		if (!Array.isArray(args)) {
+			this.#logger.warn(
+				'Astro.slots.render',
+				`Expected second parameter to be an array, received a ${typeof args}. If you're trying to pass an array as a single argument and getting unexpected results, make sure you're passing your array as a item of an array. Ex: Astro.slots.render('default', [["Hello", "World"]])`
+			);
+		} else if (args.length > 0) {
+			const slotValue = this.#slots[name];
+			const component = typeof slotValue === 'function' ? await slotValue(result) : await slotValue;
+
+			// Astro
+			const expression = getFunctionExpression(component);
+			if (expression) {
+				const slot = async () =>
+					typeof expression === 'function' ? expression(...args) : expression;
+				return await renderSlotToString(result, slot).then((res) => {
+					return res != null ? String(res) : res;
+				});
+			}
+			// JSX
+			if (typeof component === 'function') {
+				return await renderJSX(result, (component as any)(...args)).then((res) =>
+					res != null ? String(res) : res
 				);
-			} else {
-				if (expression) {
-					const slot = expression(...args);
-					return await renderSlot(this.#result, slot).then((res) =>
-						res != null ? String(res) : res
-					);
-				}
 			}
 		}
-		const content = await renderSlot(this.#result, this.#slots[name]).then((res) =>
-			res != null ? String(res) : res
-		);
-		if (cacheable) this.#cache.set(name, content);
-		return content;
+
+		const content = await renderSlotToString(result, this.#slots[name]);
+		const outHTML = chunkToString(result, content);
+
+		return outHTML;
 	}
 }
 
-let renderMarkdown: any = null;
-
 export function createResult(args: CreateResultArgs): SSRResult {
-	const { markdown, params, pathname, props: pageProps, renderers, request, resolve } = args;
+	const { params, request, resolve, locals } = args;
 
 	const url = new URL(request.url);
 	const headers = new Headers();
-	if (args.streaming) {
-		headers.set('Transfer-Encoding', 'chunked');
-		headers.set('Content-Type', 'text/html');
-	} else {
-		headers.set('Content-Type', 'text/html');
-	}
+	headers.set('Content-Type', 'text/html');
 	const response: ResponseInit = {
 		status: args.status,
 		statusText: 'OK',
@@ -145,6 +141,9 @@ export function createResult(args: CreateResultArgs): SSRResult {
 		writable: false,
 	});
 
+	// Astro.cookies is defined lazily to avoid the cost on pages that do not use it.
+	let cookies: AstroCookies | undefined = args.cookies;
+
 	// Create the result object that will be passed into the render function.
 	// This object starts here as an empty shell (not yet the result) but then
 	// calling the render() function will populate the object with scripts, styles, etc.
@@ -152,133 +151,81 @@ export function createResult(args: CreateResultArgs): SSRResult {
 		styles: args.styles ?? new Set<SSRElement>(),
 		scripts: args.scripts ?? new Set<SSRElement>(),
 		links: args.links ?? new Set<SSRElement>(),
+		componentMetadata: args.componentMetadata ?? new Map(),
+		renderers: args.renderers,
+		clientDirectives: args.clientDirectives,
+		compressHTML: args.compressHTML,
+		pathname: args.pathname,
+		cookies,
 		/** This function returns the `Astro` faux-global */
 		createAstro(
 			astroGlobal: AstroGlobalPartial,
 			props: Record<string, any>,
 			slots: Record<string, any> | null
 		) {
-			const astroSlots = new Slots(result, slots, args.logging);
+			const astroSlots = new Slots(result, slots, args.logger);
 
-			const Astro = {
+			const Astro: AstroGlobal = {
+				// @ts-expect-error
 				__proto__: astroGlobal,
 				get clientAddress() {
 					if (!(clientAddressSymbol in request)) {
 						if (args.adapterName) {
-							throw new Error(
-								`Astro.clientAddress is not available in the ${args.adapterName} adapter. File an issue with the adapter to add support.`
-							);
+							throw new AstroError({
+								...AstroErrorData.ClientAddressNotAvailable,
+								message: AstroErrorData.ClientAddressNotAvailable.message(args.adapterName),
+							});
 						} else {
-							throw new Error(
-								`Astro.clientAddress is not available in your environment. Ensure that you are using an SSR adapter that supports this feature.`
-							);
+							throw new AstroError(AstroErrorData.StaticClientAddressNotAvailable);
 						}
 					}
 
-					return Reflect.get(request, clientAddressSymbol);
+					return Reflect.get(request, clientAddressSymbol) as string;
+				},
+				get cookies() {
+					if (cookies) {
+						return cookies;
+					}
+					cookies = new AstroCookies(request);
+					result.cookies = cookies;
+					return cookies;
 				},
 				params,
 				props,
+				locals,
 				request,
 				url,
-				redirect: args.ssr
-					? (path: string) => {
-							return new Response(null, {
-								status: 302,
-								headers: {
-									Location: path,
-								},
-							});
-					  }
-					: onlyAvailableInSSR('Astro.redirect'),
-				resolve(path: string) {
-					let extra = `This can be replaced with a dynamic import like so: await import("${path}")`;
-					if (isCSSRequest(path)) {
-						extra = `It looks like you are resolving styles. If you are adding a link tag, replace with this:
----
-import "${path}";
----
-`;
-					} else if (isScriptRequest(path)) {
-						extra = `It looks like you are resolving scripts. If you are adding a script tag, replace with this:
-
-<script type="module" src={(await import("${path}?url")).default}></script>
-
-or consider make it a module like so:
-
-<script>
-	import MyModule from "${path}";
-</script>
-`;
+				redirect(path, status) {
+					// If the response is already sent, error as we cannot proceed with the redirect.
+					if ((request as any)[responseSentSymbol]) {
+						throw new AstroError({
+							...AstroErrorData.ResponseSentError,
+						});
 					}
 
-					warn(
-						args.logging,
-						`deprecation`,
-						`${bold(
-							'Astro.resolve()'
-						)} is deprecated. We see that you are trying to resolve ${path}.
-${extra}`
-					);
-					// Intentionally return an empty string so that it is not relied upon.
-					return '';
+					return new Response(null, {
+						status: status || 302,
+						headers: {
+							Location: path,
+						},
+					});
 				},
-				response,
-				slots: astroSlots,
-			} as unknown as AstroGlobal;
-
-			Object.defineProperty(Astro, 'canonicalURL', {
-				get: function () {
-					warn(
-						args.logging,
-						'deprecation',
-						`${bold('Astro.canonicalURL')} is deprecated! Use \`Astro.url\` instead.
-Example:
-
----
-const canonicalURL = new URL(Astro.url.pathname, Astro.site);
----
-`
-					);
-					return new URL(this.request.url.pathname, this.site);
-				},
-			});
-
-			Object.defineProperty(Astro, '__renderMarkdown', {
-				// Ensure this API is not exposed to users
-				enumerable: false,
-				writable: false,
-				// TODO: Remove this hole "Deno" logic once our plugin gets Deno support
-				value: async function (content: string, opts: MarkdownRenderingOptions) {
-					// @ts-ignore
-					if (typeof Deno !== 'undefined') {
-						throw new Error('Markdown is not supported in Deno SSR');
-					}
-
-					if (!renderMarkdown) {
-						// The package is saved in this variable because Vite is too smart
-						// and will try to inline it in buildtime
-						let astroRemark = '@astrojs/';
-						astroRemark += 'markdown-remark';
-
-						renderMarkdown = (await import(astroRemark)).renderMarkdown;
-					}
-
-					const { code } = await renderMarkdown(content, { ...markdown, ...(opts ?? {}) });
-					return code;
-				},
-			});
+				response: response as AstroGlobal['response'],
+				slots: astroSlots as unknown as AstroGlobal['slots'],
+			};
 
 			return Astro;
 		},
 		resolve,
-		_metadata: {
-			renderers,
-			pathname,
-			hasHydrationScript: false,
-			hasDirectives: new Set(),
-		},
 		response,
+		_metadata: {
+			hasHydrationScript: false,
+			hasRenderedHead: false,
+			hasDirectives: new Set(),
+			headInTree: false,
+			extraHead: [],
+			propagators: new Set(),
+		},
 	};
 
 	return result;

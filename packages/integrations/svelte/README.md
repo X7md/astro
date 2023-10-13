@@ -9,6 +9,7 @@ There are two ways to add integrations to your project. Let's try the most conve
 ### `astro add` command
 
 Astro includes a CLI tool for adding first party integrations: `astro add`. This command will:
+
 1. (Optionally) Install all necessary dependencies and peer dependencies
 2. (Also optionally) Update your `astro.config.*` file to apply this integration
 
@@ -16,14 +17,14 @@ To install `@astrojs/svelte`, run the following from your project directory and 
 
 ```sh
 # Using NPM
-npm run astro add svelte
+npx astro add svelte
 # Using Yarn
 yarn astro add svelte
 # Using PNPM
 pnpm astro add svelte
 ```
 
-If you run into any hiccups, [feel free to log an issue on our GitHub](https://github.com/withastro/astro/issues) and try the manual installation steps below.
+If you run into any issues, [feel free to report them to us on GitHub](https://github.com/withastro/astro/issues) and try the manual installation steps below.
 
 ### Install dependencies manually
 
@@ -41,53 +42,91 @@ npm install svelte
 
 Now, apply this integration to your `astro.config.*` file using the `integrations` property:
 
-__`astro.config.mjs`__
+```diff lang="js" "svelte()"
+  // astro.config.mjs
+  import { defineConfig } from 'astro/config';
++ import svelte from '@astrojs/svelte';
 
-```js
-import svelte from '@astrojs/svelte';
-
-export default {
-  // ...
-  integrations: [svelte()],
-}
+  export default defineConfig({
+    // ...
+    integrations: [svelte()],
+    //             ^^^^^^^^
+  });
 ```
 
 ## Getting started
 
 To use your first Svelte component in Astro, head to our [UI framework documentation][astro-ui-frameworks]. You'll explore:
+
 - 📦 how framework components are loaded,
 - 💧 client-side hydration options, and
-- 🪆 opportunities to mix and nest frameworks together
+- 🤝 opportunities to mix and nest frameworks together
 
-Also check our [Astro Integration Documentation][astro-integration] for more on integrations.
+## Troubleshooting
+
+For help, check out the `#support` channel on [Discord](https://astro.build/chat). Our friendly Support Squad members are here to help!
+
+You can also check our [Astro Integration Documentation][astro-integration] for more on integrations.
+
+## Contributing
+
+This package is maintained by Astro's Core team. You're welcome to submit an issue or PR!
 
 [astro-integration]: https://docs.astro.build/en/guides/integrations-guide/
 [astro-ui-frameworks]: https://docs.astro.build/en/core-concepts/framework-components/#using-framework-components
 
 ## Options
 
-This integration is powered by `@sveltejs/vite-plugin-svelte`. To customize the Svelte compiler, options can be provided to the integration. See the `@sveltejs/vite-plugin-svelte` [docs](https://github.com/sveltejs/vite-plugin-svelte/blob/HEAD/docs/config.md) for more details.
+This integration is powered by `@sveltejs/vite-plugin-svelte`. To customize the Svelte compiler, options can be provided to the integration. See the [`@sveltejs/vite-plugin-svelte` docs](https://github.com/sveltejs/vite-plugin-svelte/blob/HEAD/docs/config.md) for more details.
 
 ### Default options
 
-A few of the default options passed to the Svelte compiler are required to build properly for Astro and cannot be overridden.
+This integration passes the following default options to the Svelte compiler:
 
 ```js
 const defaultOptions = {
   emitCss: true,
   compilerOptions: { dev: isDev, hydratable: true },
-  preprocess: [
-    preprocess({
-      less: true,
-      sass: { renderSync: true },
-      scss: { renderSync: true },
-      stylus: true,
-      typescript: true,
-    }),
-  ],
+  preprocess: vitePreprocess(),
 };
 ```
 
-The `emitCss`, `compilerOptions.dev`, and `compilerOptions.hydratable` cannot be overridden.
+These `emitCss`, `compilerOptions.dev`, and `compilerOptions.hydratable` values are required to build properly for Astro and cannot be overridden.
 
-Providing your own `preprocess` options **will** override the defaults - make sure to enable the preprocessor flags needed for your project.
+Providing your own `preprocess` options **will** override the [`vitePreprocess()`](https://github.com/sveltejs/vite-plugin-svelte/blob/HEAD/docs/preprocess.md) default. Make sure to enable the preprocessor flags needed for your project.
+
+You can set options either by passing them to the `svelte` integration in `astro.config.mjs` or in `svelte.config.js`. Either of these would override the default `preprocess` setting:
+
+```js
+// astro.config.mjs
+import { defineConfig } from 'astro/config';
+import svelte from '@astrojs/svelte';
+
+export default defineConfig({
+  integrations: [svelte({ preprocess: [] })],
+});
+```
+
+```js
+// svelte.config.js
+export default {
+  preprocess: [],
+};
+```
+
+## Intellisense for TypeScript
+
+**Added in:** `@astrojs/svelte@2.0.0`
+
+If you're using a preprocessor like TypeScript or SCSS in your Svelte files, you can create a `svelte.config.js` file so that the Svelte IDE extension can correctly parse the Svelte files.
+
+```js
+// svelte.config.js
+import { vitePreprocess } from '@astrojs/svelte';
+
+export default {
+  preprocess: vitePreprocess(),
+};
+```
+
+This config file will be automatically added for you when you run `astro add svelte`.

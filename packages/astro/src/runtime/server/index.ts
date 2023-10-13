@@ -1,46 +1,47 @@
+// NOTE: Although this entrypoint is exported, it is internal API and may change at any time.
+
+export { createComponent } from './astro-component.js';
 export { createAstro } from './astro-global.js';
 export { renderEndpoint } from './endpoint.js';
 export {
 	escapeHTML,
+	HTMLBytes,
 	HTMLString,
+	isHTMLString,
 	markHTMLString,
-	markHTMLString as unescapeHTML,
+	unescapeHTML,
 } from './escape.js';
-export type { Metadata } from './metadata';
-export { createMetadata } from './metadata.js';
+export { renderJSX } from './jsx.js';
 export {
 	addAttribute,
+	createHeadAndContent,
 	defineScriptVars,
 	Fragment,
 	maybeRenderHead,
-	renderAstroComponent,
+	renderTemplate as render,
 	renderComponent,
 	Renderer as Renderer,
 	renderHead,
 	renderHTMLElement,
 	renderPage,
+	renderScriptElement,
 	renderSlot,
-	renderTemplate as render,
+	renderSlotToString,
 	renderTemplate,
 	renderToString,
-	stringifyChunk,
+	renderUniqueStylesheet,
 	voidElementNames,
 } from './render/index.js';
-export type { AstroComponentFactory, RenderInstruction } from './render/index.js';
-import type { AstroComponentFactory } from './render/index.js';
+export type {
+	AstroComponentFactory,
+	AstroComponentInstance,
+	ComponentSlots,
+	RenderInstruction,
+} from './render/index.js';
+export { createTransitionScope, renderTransition } from './transition.js';
 
 import { markHTMLString } from './escape.js';
-import { Renderer } from './render/index.js';
-
-import { addAttribute } from './render/index.js';
-
-// Used in creating the component. aka the main export.
-export function createComponent(cb: AstroComponentFactory) {
-	// Add a flag to this callback to mark it as an Astro component
-	// INVESTIGATE does this need to cast
-	(cb as any).isAstroComponentFactory = true;
-	return cb;
-}
+import { addAttribute, Renderer } from './render/index.js';
 
 export function mergeSlots(...slotted: unknown[]) {
 	const slots: Record<string, () => any> = {};
@@ -55,7 +56,7 @@ export function mergeSlots(...slotted: unknown[]) {
 	return slots;
 }
 
-/** @internal Assosciate JSX components with a specific renderer (see /src/vite-plugin-jsx/tag.ts) */
+/** @internal Associate JSX components with a specific renderer (see /src/vite-plugin-jsx/tag.ts) */
 export function __astro_tag_component__(Component: unknown, rendererName: string) {
 	if (!Component) return;
 	if (typeof Component !== 'function') return;
@@ -68,7 +69,7 @@ export function __astro_tag_component__(Component: unknown, rendererName: string
 
 // Adds support for `<Component {...value} />
 export function spreadAttributes(
-	values: Record<any, any>,
+	values: Record<any, any> = {},
 	_name?: string,
 	{ class: scopedClassName }: { class?: string } = {}
 ) {

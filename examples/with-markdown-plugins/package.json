@@ -1,5 +1,6 @@
 {
   "name": "@example/with-markdown-plugins",
+  "type": "module",
   "version": "0.0.2",
   "private": true,
   "scripts": {
@@ -9,12 +10,12 @@
     "preview": "astro preview",
     "astro": "astro"
   },
-  "devDependencies": {
-    "@astrojs/markdown-remark": "^1.1.1",
-    "astro": "^1.1.2",
-    "hast-util-select": "5.0.1",
+  "dependencies": {
+    "@astrojs/markdown-remark": "^3.3.0",
+    "astro": "^3.3.0",
+    "hast-util-select": "^5.0.5",
     "rehype-autolink-headings": "^6.1.1",
-    "rehype-slug": "^5.0.1",
+    "rehype-slug": "^5.1.0",
     "rehype-toc": "^3.0.2",
     "remark-code-titles": "^0.1.2"
   }

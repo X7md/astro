@@ -1,10 +1,11 @@
 {
-  "name": "@test/vue-component",
+  "name": "@e2e/vue-component",
   "version": "0.0.0",
   "private": true,
   "dependencies": {
+    "@astrojs/mdx": "workspace:*",
     "@astrojs/vue": "workspace:*",
     "astro": "workspace:*",
-    "@astrojs/mdx": "workspace:*"
+    "vue": "^3.3.4"
   }
 }

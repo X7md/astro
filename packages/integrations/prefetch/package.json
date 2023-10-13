@@ -1,7 +1,7 @@
 {
   "name": "@astrojs/prefetch",
-  "description": "Faster page navigations by prefetching links when the browser is idle.",
-  "version": "0.0.7",
+  "description": "Prefetch page navigations in your Astro site",
+  "version": "0.4.1",
   "type": "module",
   "types": "./dist/index.d.ts",
   "author": "withastro",
@@ -12,7 +12,9 @@
     "directory": "packages/astro-prefetch"
   },
   "keywords": [
-    "astro-integration"
+    "astro-integration",
+    "performance",
+    "withastro"
   ],
   "bugs": "https://github.com/withastro/astro/issues",
   "homepage": "https://docs.astro.build/en/guides/integrations-guide/prefetch/",
@@ -21,6 +23,9 @@
     "./client.js": "./dist/client.js",
     "./package.json": "./package.json"
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "astro-scripts build \"src/**/*.ts\" && tsc",
     "build:ci": "astro-scripts build \"src/**/*.ts\"",
@@ -29,14 +34,14 @@
     "test:match": "playwright test -g"
   },
   "devDependencies": {
-    "@types/chai": "^4.3.1",
-    "@types/chai-as-promised": "^7.1.5",
-    "@types/mocha": "^9.1.1",
+    "@playwright/test": "^1.37.1",
     "astro": "workspace:*",
-    "astro-scripts": "workspace:*",
-    "playwright": "^1.22.2"
+    "astro-scripts": "workspace:*"
   },
   "dependencies": {
     "throttles": "^1.0.1"
+  },
+  "publishConfig": {
+    "provenance": true
   }
 }
